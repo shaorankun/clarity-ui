@@ -284,7 +284,11 @@ class RoomProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _cleanup();
+    if (currentRoom != null) {
+      leaveRoom();
+    } else {
+      _cleanup();
+    }
     super.dispose();
   }
 }

@@ -57,6 +57,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 32),
 
                 TextField(
+                  maxLength: 12,
                   controller: _nameCtrl,
                   style: const TextStyle(color: AppColors.textPrimary),
                   decoration: const InputDecoration(hintText: 'Display name'),

@@ -46,7 +46,15 @@ class _ClarityAppState extends State<ClarityApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
-      context.read<RoomProvider>().leaveRoom();
+      final timer = context.read<TimerProvider>();
+      final room  = context.read<RoomProvider>();
+
+      if (timer.status != TimerStatus.idle) {
+        timer.abandon();
+      }
+      if (room.currentRoom != null) {
+        room.leaveRoom();
+      }
     }
   }
 

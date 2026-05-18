@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../timer/providers/timer_provider.dart';
 import 'timer_screen.dart';
 import '../../tasks/screens/tasks_screen.dart';
 import '../../stats/screens/stats_screen.dart';
@@ -26,6 +28,14 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TimerProvider>().cancelStaleSession();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_index],
@@ -41,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
             BottomNavigationBarItem(icon: Icon(Iconsax.task_square), label: 'Tasks'),
             BottomNavigationBarItem(icon: Icon(Iconsax.chart_2), label: 'Stats'),
             BottomNavigationBarItem(icon: Icon(Iconsax.people), label: 'Rooms'),
-            BottomNavigationBarItem(icon: Icon(Iconsax.user),         label: 'Profile'),
+            BottomNavigationBarItem(icon: Icon(Iconsax.user), label: 'Profile'),
           ],
         ),
       ),
