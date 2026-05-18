@@ -17,6 +17,8 @@ class RoomProvider extends ChangeNotifier {
   int remainingSeconds = 0;
   Timer? _countdown;
 
+  String? _currentSessionId;
+
   // WebSocket
   StompClient? _stompClient;
   bool isConnected = false;
@@ -31,8 +33,9 @@ class RoomProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final res = await _dio.post('/api/rooms', data: {'name': name});
-      currentRoom = StudyRoom.fromJson(res.data);
-      notifyListeners();
+      final roomId = StudyRoom.fromJson(res.data).id;
+      await fetchRoom(roomId);
+
       return true;
     } on DioException catch (e) {
       errorMessage = e.response?.data['message'] ?? 'Failed to create room';
@@ -49,8 +52,9 @@ class RoomProvider extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      await _dio.post('/api/rooms/join', data: {'inviteCode': inviteCode});
-      notifyListeners();
+      final res = await _dio.post('/api/rooms/join', data: {'inviteCode': inviteCode});
+      final roomId = StudyRoom.fromJson(res.data).id;
+      await fetchRoom(roomId);
       return true;
     } on DioException catch (e) {
       errorMessage = e.response?.data['message'] ?? 'Failed to join room';
@@ -86,6 +90,7 @@ class RoomProvider extends ChangeNotifier {
     try {
       await _dio.delete('/api/rooms/${currentRoom!.id}/leave');
     } catch (_) {}
+    await _cancelSession();
     _cleanup();
   }
 
@@ -93,33 +98,64 @@ class RoomProvider extends ChangeNotifier {
 
   Future<void> connectWebSocket(String roomId) async {
     final token = await TokenStorage.getAccessToken();
-    if (token == null) return;
+    if (token == null) {
+      print('=== WS: No token, abort');
+      return;
+    }
+
+    // SockJS dùng https:// không phải wss://
+    final sockJsUrl = '${DioClient.baseUrl}/ws';
+    print('=== WS: Connecting to $sockJsUrl');
 
     _stompClient = StompClient(
-      config: StompConfig(
-        url: '${DioClient.baseUrl.replaceFirst('https', 'ws')}/ws',
+      config: StompConfig.sockJS(
+        url: sockJsUrl,
         onConnect: (frame) {
+          print('=== WS: Connected!');
           isConnected = true;
           notifyListeners();
 
           _stompClient!.subscribe(
             destination: '/topic/room/$roomId',
             callback: (frame) {
+              print('=== WS: Received: ${frame.body}');
               if (frame.body == null) return;
               final data = jsonDecode(frame.body!);
-              roomSession = RoomSession.fromJson(data);
+              final newSession = RoomSession.fromJson(data);
+
+              // Nếu chuyển sang FOCUSING → start session cho user này
+              if (newSession.status == 'FOCUSING' &&
+                  roomSession?.status != 'FOCUSING') {
+                _startSession(newSession.durationMinutes ?? 25);
+              }
+
+              if (newSession.status == 'IDLE' && roomSession?.status == 'FOCUSING') {
+                _cancelSession();
+              }
+
+              if (newSession.status == 'BREAK' && roomSession?.status == 'FOCUSING') {
+                _cancelSession();
+              }
+
+              roomSession = newSession;
               _syncCountdown();
               notifyListeners();
             },
           );
+          print('=== WS: Subscribed to /topic/room/$roomId');
         },
         onDisconnect: (_) {
+          print('=== WS: Disconnected');
           isConnected = false;
           notifyListeners();
         },
-        onWebSocketError: (_) {
+        onWebSocketError: (error) {
+          print('=== WS: Error: $error');
           isConnected = false;
           notifyListeners();
+        },
+        onStompError: (frame) {
+          print('=== WS: STOMP Error: ${frame.body}');
         },
         stompConnectHeaders: {'Authorization': 'Bearer $token'},
         webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
@@ -131,7 +167,12 @@ class RoomProvider extends ChangeNotifier {
   // ── Owner controls ────────────────────────────────────
 
   void startFocus(int durationMinutes) {
-    if (currentRoom == null) return;
+    print('=== WS: isConnected=$isConnected, client=${_stompClient?.connected}');
+    if (currentRoom == null) {
+      print('=== WS: No current room');
+      return;
+    }
+    print('=== WS: Sending start to /app/room/${currentRoom!.id}/start');
     _stompClient?.send(
       destination: '/app/room/${currentRoom!.id}/start',
       body: jsonEncode({'durationMinutes': durationMinutes}),
@@ -172,6 +213,10 @@ class RoomProvider extends ChangeNotifier {
         notifyListeners();
       } else {
         _countdown?.cancel();
+        print('=== Countdown done, status=${roomSession?.status}');
+        if (roomSession?.status == 'FOCUSING') {
+          _completeSession();
+        }
       }
     });
   }
@@ -194,6 +239,47 @@ class RoomProvider extends ChangeNotifier {
     remainingSeconds = 0;
     isConnected      = false;
     notifyListeners();
+  }
+
+  Future<void> _startSession(int durationMinutes) async {
+    try {
+      final res = await _dio.post('/api/sessions/start', data: {
+        'durationMinutes': durationMinutes,
+      });
+      _currentSessionId = res.data['id'];
+      print('=== Room session started: $_currentSessionId');
+    } catch (e) {
+      print('=== Room session start failed: $e');
+    }
+  }
+
+  Future<void> _completeSession() async {
+    if (_currentSessionId == null) return;
+    try {
+      await _dio.post('/api/sessions/end', data: {
+        'id': _currentSessionId,
+        'status': 'COMPLETED',
+      });
+      print('=== Room session COMPLETED');
+    } catch (e) {
+      print('=== Room session complete failed: $e');
+    }
+    _currentSessionId = null;
+  }
+
+  Future<void> _cancelSession() async {
+    if (_currentSessionId == null) return;
+    try {
+      await _dio.post('/api/sessions/end', data: {
+        'id': _currentSessionId,
+        'status': 'ABANDONED',
+      });
+      print('=== Session CANCELLED: $_currentSessionId');
+    } catch (e) {
+      print('=== Cancel failed: $e');
+      if (e is DioException) print('=== Cancel error body: ${e.response?.data}');
+    }
+    _currentSessionId = null;
   }
 
   @override

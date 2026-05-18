@@ -20,6 +20,7 @@ class TimerProvider extends ChangeNotifier {
 
   String? selectedTaskId;
   String? selectedTaskTitle;
+  String? _currentSessionId;
 
   Timer? _ticker;
   final _dio = DioClient.instance;
@@ -56,7 +57,17 @@ class TimerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void start() {
+  Future<void> start() async {
+    try {
+      final res = await _dio.post('/api/sessions/start', data: {
+        'durationMinutes': _durations[mode]! ~/ 60,
+        if (selectedTaskId != null) 'taskId': selectedTaskId,
+      });
+      _currentSessionId = res.data['id'];
+    } catch (e) {
+      print('=== Session start failed: $e');
+      return;
+    }
     status = TimerStatus.running;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     notifyListeners();
@@ -70,9 +81,18 @@ class TimerProvider extends ChangeNotifier {
 
   void resume() => start();
 
-  void abandon() {
+  Future<void> abandon() async {
     _ticker?.cancel();
-    status    = TimerStatus.idle;
+    if (_currentSessionId != null) {
+      try {
+        await _dio.post('/api/sessions/end', data: {
+          'sessionId': _currentSessionId,
+          'status': 'ABANDONED',
+        });
+      } catch (_) {}
+      _currentSessionId = null;
+    }
+    status = TimerStatus.idle;
     remaining = _durations[mode]!;
     notifyListeners();
   }
@@ -90,15 +110,18 @@ class TimerProvider extends ChangeNotifier {
     _ticker?.cancel();
     status = TimerStatus.idle;
 
-    if (mode == TimerMode.focus) {
-      sessions++;
-      // Log session to backend
+    if (mode == TimerMode.focus && _currentSessionId != null) {
       try {
-        await _dio.post('/api/sessions', data: {
-          'durationMinutes': _durations[TimerMode.focus]! ~/ 60,
-          if (selectedTaskId != null) 'taskId': selectedTaskId,
+        await _dio.post('/api/sessions/end', data: {
+          'sessionId': _currentSessionId,
+          'status': 'COMPLETED',
         });
-      } catch (_) {}
+        print('=== Solo session COMPLETED');
+      } catch (e) {
+        print('=== Solo session end failed: $e');
+      }
+      _currentSessionId = null;
+      sessions++;
     }
 
     remaining = _durations[mode]!;

@@ -5,9 +5,14 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/app_button.dart';
 import 'inside_room_screen.dart';
 
-class RoomsScreen extends StatelessWidget {
+class RoomsScreen extends StatefulWidget {
   const RoomsScreen({super.key});
 
+  @override
+  State<RoomsScreen> createState() => _RoomsScreenState();
+}
+
+class _RoomsScreenState extends State<RoomsScreen> {
   @override
   Widget build(BuildContext context) {
     final room = context.watch<RoomProvider>();
@@ -114,31 +119,33 @@ class RoomsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Consumer<RoomProvider>(
-              builder: (context, room, _) => AppButton(
+              builder: (ctx2, room, _) => AppButton(
                 label: 'Create Room',
                 isLoading: room.isLoading,
                 onPressed: () async {
-                  if (ctrl.text
-                      .trim()
-                      .isEmpty) return;
-                  final ok = await room.createRoom(ctrl.text.trim());
-                  if (ok && context.mounted) {
-                    final roomId = room.currentRoom!.id;
+                  if (ctrl.text.trim().isEmpty) return;
+                  final name = ctrl.text.trim();
+                  final navigator = Navigator.of(context);
+                  final ok = await room.createRoom(name);
+                  if (ok) {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) =>
-                          InsideRoomScreen(
-                              roomId: room.currentRoom!.id),
-                    ));
+                    if (mounted) {
+                      navigator.push(MaterialPageRoute(
+                        builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
+                      ));
+                    }
                   } else if (room.errorMessage?.contains('already') == true) {
-                    // Đang ở phòng khác — hỏi có muốn leave không
                     Navigator.pop(ctx);
-                    _showAlreadyInRoomDialog(context, room, ctrl.text.trim());
+                    if (mounted) {
+                      _showAlreadyInRoomDialog(room, name, isCreate: true);
+                    }
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(room.errorMessage ?? 'Error'),
-                          backgroundColor: AppColors.danger),
-                    );
+                    if (ctx2.mounted) {
+                      ScaffoldMessenger.of(ctx2).showSnackBar(
+                        SnackBar(content: Text(room.errorMessage ?? 'Error'),
+                            backgroundColor: AppColors.danger),
+                      );
+                    }
                   }
                 },
               ),
@@ -182,7 +189,6 @@ class RoomsScreen extends StatelessWidget {
               controller: ctrl,
               autofocus: true,
               maxLength: 6,
-              textCapitalization: TextCapitalization.characters,
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 24,
@@ -196,25 +202,33 @@ class RoomsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Consumer<RoomProvider>(
-              builder: (context, room, _) => AppButton(
+              builder: (ctx2, room, _) => AppButton(
                 label: 'Join Room',
                 isLoading: room.isLoading,
                 onPressed: () async {
                   if (ctrl.text.trim().length != 6) return;
-                  final ok = await room.joinRoom(ctrl.text.trim());
-                  if (!context.mounted) return;
+                  final code = ctrl.text.trim();
+                  final navigator = Navigator.of(context);
+                  final ok = await room.joinRoom(code);
                   if (ok) {
                     Navigator.pop(ctx);
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => InsideRoomScreen(
-                          roomId: room.currentRoom!.id),
-                    ));
+                    if (mounted) {
+                      navigator.push(MaterialPageRoute(
+                        builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
+                      ));
+                    }
+                  } else if (room.errorMessage?.contains('already') == true) {
+                    Navigator.pop(ctx);
+                    if (mounted) {
+                      _showAlreadyInRoomDialog(room, code, isCreate: false);
+                    }
                   } else {
-                    // Hiện error
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(room.errorMessage ?? 'Error'),
-                          backgroundColor: AppColors.danger),
-                    );
+                    if (ctx2.mounted) {
+                      ScaffoldMessenger.of(ctx2).showSnackBar(
+                        SnackBar(content: Text(room.errorMessage ?? 'Error'),
+                            backgroundColor: AppColors.danger),
+                      );
+                    }
                   }
                 },
               ),
@@ -225,11 +239,11 @@ class RoomsScreen extends StatelessWidget {
     );
   }
 
-  void _showAlreadyInRoomDialog(
-      BuildContext context, RoomProvider room, String inviteCode) {
+  void _showAlreadyInRoomDialog(RoomProvider room, String value, {bool isCreate = false}) {
+    final navigator = Navigator.of(context);
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('Already in a Room',
             style: TextStyle(color: AppColors.textPrimary)),
@@ -238,24 +252,26 @@ class RoomsScreen extends StatelessWidget {
             style: TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textMuted)),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               await room.leaveRoom();
-              final ok = await room.joinRoom(inviteCode);
-              if (ok && context.mounted) {
-                Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => InsideRoomScreen(
-                      roomId: room.currentRoom!.id),
+              final ok = isCreate
+                  ? await room.createRoom(value)
+                  : await room.joinRoom(value);
+              if (ok && mounted) {
+                navigator.push(MaterialPageRoute(
+                  builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
                 ));
               }
             },
-            child: const Text('Leave & Join',
-                style: TextStyle(color: AppColors.primary)),
+            child: Text(
+              isCreate ? 'Leave & Create' : 'Leave & Join',
+              style: const TextStyle(color: AppColors.primary),
+            ),
           ),
         ],
       ),

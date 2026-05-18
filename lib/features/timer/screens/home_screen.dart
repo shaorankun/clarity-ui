@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import '../../../core/theme/app_colors.dart';
 import 'timer_screen.dart';
-// Placeholder imports — sẽ thay khi làm từng giai đoạn
 import '../../tasks/screens/tasks_screen.dart';
 import '../../stats/screens/stats_screen.dart';
 import '../../rooms/screens/rooms_screen.dart';
+import '../../auth/screens/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const TasksScreen(),
     const StatsScreen(),
     const RoomsScreen(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -40,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
             BottomNavigationBarItem(icon: Icon(Iconsax.task_square), label: 'Tasks'),
             BottomNavigationBarItem(icon: Icon(Iconsax.chart_2), label: 'Stats'),
             BottomNavigationBarItem(icon: Icon(Iconsax.people), label: 'Rooms'),
+            BottomNavigationBarItem(icon: Icon(Iconsax.user),         label: 'Profile'),
           ],
         ),
       ),

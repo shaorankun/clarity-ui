@@ -251,7 +251,7 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
 
   void _showDurationPicker(
       BuildContext context, RoomProvider room, String type) {
-    final options = [5, 10, 15, 25, 30, 45, 50];
+    final options = [1, 5, 10, 15, 25, 30, 45, 50];
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,

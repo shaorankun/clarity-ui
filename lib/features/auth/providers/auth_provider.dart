@@ -18,6 +18,10 @@ class AuthProvider extends ChangeNotifier {
   Future<void> checkAuth() async {
     final token = await TokenStorage.getAccessToken();
     if (token != null) {
+      final userJson = await TokenStorage.getUser();
+      if (userJson != null) {
+        user = UserModel.fromJson(userJson);
+      }
       status = AuthStatus.authenticated;
     } else {
       status = AuthStatus.unauthenticated;
@@ -39,6 +43,7 @@ class AuthProvider extends ChangeNotifier {
         accessToken:  res.data['accessToken'],
         refreshToken: res.data['refreshToken'],
       );
+      await TokenStorage.saveUser(res.data);
       user   = UserModel.fromJson(res.data);
       status = AuthStatus.authenticated;
       notifyListeners();
@@ -68,6 +73,7 @@ class AuthProvider extends ChangeNotifier {
         accessToken:  res.data['accessToken'],
         refreshToken: res.data['refreshToken'],
       );
+      await TokenStorage.saveUser(res.data);
       user   = UserModel.fromJson(res.data);
       status = AuthStatus.authenticated;
       notifyListeners();

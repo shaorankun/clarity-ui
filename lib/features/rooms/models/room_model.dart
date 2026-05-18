@@ -32,8 +32,8 @@ class StudyRoom {
     ownerId:    json['ownerId'],
     name:       json['name'],
     inviteCode: json['inviteCode'],
-    isActive:   json['isActive'] ?? true,
-    members: (json['members'] as List? ?? [])
+    isActive:   json['active'] ?? true,
+    members: (json['roomMembers'] as List? ?? [])
         .map((e) => RoomMember.fromJson(e))
         .toList(),
   );
@@ -56,15 +56,31 @@ class RoomSession {
     roomId:          json['roomId'],
     status:          json['status'] ?? 'IDLE',
     startedAt:       json['startedAt'] != null
-        ? DateTime.parse(json['startedAt']) : null,
+        ? _parseDateTime(json['startedAt']) : null,
     durationMinutes: json['durationMinutes'],
   );
+
+  static DateTime? _parseDateTime(String raw) {
+    try {
+      final trimmed = raw.replaceFirstMapped(
+        RegExp(r'(\.\d{6})\d+'),
+            (m) => m.group(1)!,
+      );
+      // Thêm Z để đánh dấu là UTC
+      return DateTime.parse('${trimmed}Z');
+    } catch (e) {
+      print('=== DateTime parse error: $e, raw: $raw');
+      return null;
+    }
+  }
 
   // Tính số giây còn lại dựa vào startedAt + durationMinutes
   int get remainingSeconds {
     if (startedAt == null || durationMinutes == null) return 0;
-    final endTime = startedAt!.add(Duration(minutes: durationMinutes!));
-    final remaining = endTime.difference(DateTime.now()).inSeconds;
+    final startUtc = startedAt!.toUtc();
+    final endUtc = startUtc.add(Duration(minutes: durationMinutes!));
+    final remaining = endUtc.difference(DateTime.now().toUtc()).inSeconds;
+    print('=== remainingSeconds: start=$startUtc end=$endUtc now=${DateTime.now().toUtc()} remaining=$remaining');
     return remaining > 0 ? remaining : 0;
   }
 }
