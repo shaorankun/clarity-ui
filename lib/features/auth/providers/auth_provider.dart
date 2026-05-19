@@ -23,6 +23,7 @@ class AuthProvider extends ChangeNotifier {
         user = UserModel.fromJson(userJson);
       }
       status = AuthStatus.authenticated;
+      notifyListeners();
     } else {
       status = AuthStatus.unauthenticated;
     }

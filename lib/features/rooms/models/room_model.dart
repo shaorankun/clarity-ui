@@ -16,6 +16,7 @@ class StudyRoom {
   final String name;
   final String inviteCode;
   final bool isActive;
+  final bool isPublic;
   final List<RoomMember> members;
 
   StudyRoom({
@@ -24,6 +25,7 @@ class StudyRoom {
     required this.name,
     required this.inviteCode,
     required this.isActive,
+    required this.isPublic,
     required this.members,
   });
 
@@ -33,6 +35,7 @@ class StudyRoom {
     name:       json['name'],
     inviteCode: json['inviteCode'],
     isActive:   json['active'] ?? true,
+    isPublic: json['isPublic'] ?? false,
     members: (json['roomMembers'] as List? ?? [])
         .map((e) => RoomMember.fromJson(e))
         .toList(),

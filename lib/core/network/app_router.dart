@@ -4,6 +4,7 @@ import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+import '../../features/rooms/providers/room_provider.dart';
 import '../../features/timer/screens/home_screen.dart';
 
 class AppRouter extends StatelessWidget {
@@ -12,6 +13,11 @@ class AppRouter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = context.watch<AuthProvider>().status;
+
+    if (status == AuthStatus.authenticated) {
+      Future.microtask(() =>
+          context.read<RoomProvider>().restoreRoom());
+    }
 
     switch (status) {
       case AuthStatus.unknown:
