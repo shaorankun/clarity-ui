@@ -9,7 +9,7 @@ enum TimerStatus { idle, running, paused }
 
 class TimerProvider extends ChangeNotifier {
   static const Map<TimerMode, int> _durations = {
-    TimerMode.focus:      1 * 60,
+    TimerMode.focus:      25 * 60,
     TimerMode.shortBreak: 5  * 60,
     TimerMode.longBreak:  15 * 60,
   };
@@ -21,7 +21,7 @@ class TimerProvider extends ChangeNotifier {
 
   TimerMode   mode      = TimerMode.focus;
   TimerStatus status    = TimerStatus.idle;
-  int         remaining = 1 * 60;
+  int         remaining = 25 * 60;
   int         sessions  = 0;
   int         focusedSeconds = 0; // tổng giây đã focus hôm nay
 
