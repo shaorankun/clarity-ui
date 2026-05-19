@@ -74,4 +74,36 @@ class TaskProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> updateTask(String id, {required String title, String? label}) async {
+    isLoading = true;
+    notifyListeners();
+
+    try {
+      // Chuyển chuỗi rỗng thành null để báo cho backend biết là cần xóa label
+      final parsedLabel = (label != null && label.trim().isEmpty) ? null : label;
+
+      // 1 & 2 & 3. Gọi PUT endpoint với payload gồm title và label (có thể là null)
+      final res = await _dio.put('/api/tasks/$id', data: {
+        'title': title,
+        'label': parsedLabel,
+      });
+
+      // 4. Backend trả về 200 kèm object đã update, ta parse ra TaskModel
+      if (res.statusCode == 200 && res.data != null) {
+        final updatedTask = TaskModel.fromJson(res.data);
+
+        // Tìm và cập nhật lại task trong danh sách _tasks hiện tại
+        final index = _tasks.indexWhere((t) => t.id == id);
+        if (index != -1) {
+          _tasks[index] = updatedTask;
+        }
+      }
+    } on DioException catch (e) {
+      errorMessage = e.response?.data['message'] ?? 'Failed to update task';
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
 }
