@@ -13,6 +13,8 @@ class RoomProvider extends ChangeNotifier {
   RoomSession? roomSession;
   bool isLoading = false;
   String? errorMessage;
+  List<StudyRoom> publicRooms = [];
+  bool isLoadingPublic = false;
 
   // Countdown timer
   int remainingSeconds = 0;
@@ -29,15 +31,18 @@ class RoomProvider extends ChangeNotifier {
 
   // ── REST API ─────────────────────────────────────────
 
-  Future<bool> createRoom(String name) async {
+  Future<bool> createRoom(String name, {bool isPublic = false}) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
     try {
-      final res = await _dio.post('/api/rooms', data: {'name': name});
+      final res = await _dio.post('/api/rooms', data: {
+        'name': name,
+        'isPublic': isPublic,
+      });
       final roomId = StudyRoom.fromJson(res.data).id;
       await fetchRoom(roomId);
-
+      await TokenStorage.saveRoomId(currentRoom!.id);
       return true;
     } on DioException catch (e) {
       errorMessage = e.response?.data['message'] ?? 'Failed to create room';
@@ -57,6 +62,26 @@ class RoomProvider extends ChangeNotifier {
       final res = await _dio.post('/api/rooms/join', data: {'inviteCode': inviteCode});
       final roomId = StudyRoom.fromJson(res.data).id;
       await fetchRoom(roomId);
+      await TokenStorage.saveRoomId(currentRoom!.id);
+      return true;
+    } on DioException catch (e) {
+      errorMessage = e.response?.data['message'] ?? 'Failed to join room';
+      notifyListeners();
+      return false;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> joinPublicRoom(String roomId) async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await _dio.post('/api/rooms/$roomId/join');
+      await fetchRoom(roomId);
+      await TokenStorage.saveRoomId(currentRoom!.id);
       return true;
     } on DioException catch (e) {
       errorMessage = e.response?.data['message'] ?? 'Failed to join room';
@@ -87,6 +112,19 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> fetchPublicRooms() async {
+    isLoadingPublic = true;
+    notifyListeners();
+    try {
+      final res = await _dio.get('/api/rooms/public');
+      publicRooms = (res.data as List)
+          .map((e) => StudyRoom.fromJson(e))
+          .toList();
+    } catch (_) {}
+    isLoadingPublic = false;
+    notifyListeners();
+  }
+
   Future<void> leaveRoom() async {
     if (currentRoom == null) return;
     try {
@@ -94,6 +132,19 @@ class RoomProvider extends ChangeNotifier {
     } catch (_) {}
     await _cancelSession();
     _cleanup();
+    await TokenStorage.clearRoomId();
+  }
+
+  Future<void> restoreRoom() async {
+    final roomId = await TokenStorage.getRoomId();
+    if (roomId == null) return;
+    try {
+      await fetchRoom(roomId);
+      print('=== Room restored: $roomId');
+    } catch (_) {
+      // Phòng không còn tồn tại → clear
+      await TokenStorage.clearRoomId();
+    }
   }
 
   // ── WebSocket ─────────────────────────────────────────

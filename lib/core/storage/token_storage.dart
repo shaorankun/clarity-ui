@@ -6,6 +6,7 @@ class TokenStorage {
   static const _accessKey  = 'access_token';
   static const _refreshKey = 'refresh_token';
   static const _userKey    = 'user_info';
+  static const _roomKey = 'current_room_id';
 
   static Future<void> saveTokens({
     required String accessToken,
@@ -37,4 +38,15 @@ class TokenStorage {
   // Generic key-value helpers cho các feature khác (e.g. TimerProvider)
   static Future<String?> readRaw(String key)               async => _storage.read(key: key);
   static Future<void>    writeRaw(String key, String value) async => _storage.write(key: key, value: value);
+  static Future<void> clearTokens() async => _storage.deleteAll();
+
+  static Future<void> saveRoomId(String roomId) async {
+    await _storage.write(key: _roomKey, value: roomId);
+  }
+
+  static Future<String?> getRoomId() async =>
+      _storage.read(key: _roomKey);
+
+  static Future<void> clearRoomId() async =>
+      _storage.delete(key: _roomKey);
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/room_model.dart';
 import '../providers/room_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/app_button.dart';
@@ -14,6 +15,16 @@ class RoomsScreen extends StatefulWidget {
 }
 
 class _RoomsScreenState extends State<RoomsScreen> {
+  bool _isPublic = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RoomProvider>().fetchPublicRooms();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = context.watch<RoomProvider>();
@@ -74,6 +85,33 @@ class _RoomsScreenState extends State<RoomsScreen> {
               const _HintRow(icon: '🔄', text: 'Timer syncs in real-time for everyone'),
               const SizedBox(height: 8),
               const _HintRow(icon: '📤', text: 'Share your invite code to let others join'),
+
+              const SizedBox(height: 32),
+              const Text('Public Rooms',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 12),
+              if (room.isLoadingPublic)
+                const Center(child: CircularProgressIndicator())
+              else if (room.publicRooms.isEmpty)
+                const Text('No public rooms available',
+                    style: TextStyle(color: AppColors.textSecondary))
+              else
+                ...room.publicRooms.map((r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _PublicRoomCard(
+                    room: r,
+                    onTap: () async {
+                      final navigator = Navigator.of(context);
+                      final ok = await room.joinPublicRoom(r.id);
+                      if (ok && mounted) {
+                        navigator.push(MaterialPageRoute(
+                          builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
+                        ));
+                      }
+                    },
+                  ),
+                )),
             ],
           ),
         ),
@@ -90,6 +128,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   void _showCreateRoom(BuildContext context) {
     final ctrl = TextEditingController();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -112,7 +151,10 @@ class _RoomsScreenState extends State<RoomsScreen> {
                         color: AppColors.textPrimary)),
                 IconButton(
                   icon: const Icon(Icons.close, color: AppColors.textMuted),
-                  onPressed: () => Navigator.pop(ctx),
+                  onPressed: () {
+                    setState(() => _isPublic = false);
+                    Navigator.pop(ctx);
+                  },
                 ),
               ],
             ),
@@ -123,7 +165,20 @@ class _RoomsScreenState extends State<RoomsScreen> {
               style: const TextStyle(color: AppColors.textPrimary),
               decoration: const InputDecoration(hintText: 'Room name...'),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Public room',
+                    style: TextStyle(color: AppColors.textSecondary)),
+                Switch(
+                  value: _isPublic,
+                  onChanged: (val) => setState(() => _isPublic = val),
+                  activeColor: AppColors.primary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Consumer<RoomProvider>(
               builder: (ctx2, room, _) => AppButton(
                 label: 'Create Room',
@@ -132,20 +187,18 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   if (ctrl.text.trim().isEmpty) return;
                   final name = ctrl.text.trim();
                   final navigator = Navigator.of(context);
-
-                  // Abandon solo session nếu đang chạy
                   await _abandonSoloIfRunning();
-
-                  final ok = await room.createRoom(name);
+                  final ok = await room.createRoom(name, isPublic: _isPublic);
                   if (ok) {
+                    setState(() => _isPublic = false);
                     Navigator.pop(ctx);
                     if (mounted) {
                       navigator.push(MaterialPageRoute(
-                        builder: (_) => InsideRoomScreen(
-                            roomId: room.currentRoom!.id),
+                        builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
                       ));
                     }
                   } else if (room.errorMessage?.contains('already') == true) {
+                    setState(() => _isPublic = false);
                     Navigator.pop(ctx);
                     if (mounted) {
                       _showAlreadyInRoomDialog(room, name, isCreate: true);
@@ -416,6 +469,51 @@ class _RejoinBanner extends StatelessWidget {
             ),
             const Icon(Icons.arrow_forward_ios,
                 color: AppColors.primary, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PublicRoomCard extends StatelessWidget {
+  final StudyRoom room;
+  final VoidCallback onTap;
+
+  const _PublicRoomCard({required this.room, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.surfaceLight),
+        ),
+        child: Row(
+          children: [
+            const Text('🏠', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(room.name,
+                      style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('${room.members.length} member(s)',
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios,
+                color: AppColors.textMuted, size: 14),
           ],
         ),
       ),
