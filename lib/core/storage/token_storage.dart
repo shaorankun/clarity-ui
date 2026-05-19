@@ -38,8 +38,6 @@ class TokenStorage {
   // Generic key-value helpers cho các feature khác (e.g. TimerProvider)
   static Future<String?> readRaw(String key)               async => _storage.read(key: key);
   static Future<void>    writeRaw(String key, String value) async => _storage.write(key: key, value: value);
-  static Future<void> clearTokens() async => _storage.deleteAll();
-
   static Future<void> saveRoomId(String roomId) async {
     await _storage.write(key: _roomKey, value: roomId);
   }
