@@ -40,6 +40,8 @@ class RoomProvider extends ChangeNotifier {
         'name': name,
         'isPublic': isPublic,
       });
+      print('=== createRoom data: name=$name, isPublic=$isPublic');
+      print('=== createRoom response: ${res.data}');
       final roomId = StudyRoom.fromJson(res.data).id;
       await fetchRoom(roomId);
       await TokenStorage.saveRoomId(currentRoom!.id);
@@ -131,8 +133,8 @@ class RoomProvider extends ChangeNotifier {
       await _dio.delete('/api/rooms/${currentRoom!.id}/leave');
     } catch (_) {}
     await _cancelSession();
-    _cleanup();
     await TokenStorage.clearRoomId();
+    _cleanup();
   }
 
   Future<void> restoreRoom() async {
