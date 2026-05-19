@@ -54,9 +54,7 @@ class TaskProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _dio.patch('/api/tasks/$id', data: {
-        'completed': _tasks[index].completed,
-      });
+      await _dio.patch('/api/tasks/$id/complete');
     } catch (_) {
       // Rollback nếu API lỗi
       _tasks[index] = old;

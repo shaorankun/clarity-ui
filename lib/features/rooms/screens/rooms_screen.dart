@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/room_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/app_button.dart';
+import '../../../features/timer/providers/timer_provider.dart';
 import 'inside_room_screen.dart';
 
 class RoomsScreen extends StatefulWidget {
@@ -20,7 +21,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
     return Container(
       decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
       child: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,7 +47,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Create room card
               _ActionCard(
                 icon: '🚪',
                 title: 'Create a Room',
@@ -56,7 +56,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Join room card
               _ActionCard(
                 icon: '🔑',
                 title: 'Join with Code',
@@ -80,6 +79,13 @@ class _RoomsScreenState extends State<RoomsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _abandonSoloIfRunning() async {
+    final timer = context.read<TimerProvider>();
+    if (timer.status != TimerStatus.idle) {
+      await timer.abandon();
+    }
   }
 
   void _showCreateRoom(BuildContext context) {
@@ -126,12 +132,17 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   if (ctrl.text.trim().isEmpty) return;
                   final name = ctrl.text.trim();
                   final navigator = Navigator.of(context);
+
+                  // Abandon solo session nếu đang chạy
+                  await _abandonSoloIfRunning();
+
                   final ok = await room.createRoom(name);
                   if (ok) {
                     Navigator.pop(ctx);
                     if (mounted) {
                       navigator.push(MaterialPageRoute(
-                        builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
+                        builder: (_) => InsideRoomScreen(
+                            roomId: room.currentRoom!.id),
                       ));
                     }
                   } else if (room.errorMessage?.contains('already') == true) {
@@ -142,7 +153,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   } else {
                     if (ctx2.mounted) {
                       ScaffoldMessenger.of(ctx2).showSnackBar(
-                        SnackBar(content: Text(room.errorMessage ?? 'Error'),
+                        SnackBar(
+                            content: Text(room.errorMessage ?? 'Error'),
                             backgroundColor: AppColors.danger),
                       );
                     }
@@ -209,12 +221,17 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   if (ctrl.text.trim().length != 6) return;
                   final code = ctrl.text.trim();
                   final navigator = Navigator.of(context);
+
+                  // Abandon solo session nếu đang chạy
+                  await _abandonSoloIfRunning();
+
                   final ok = await room.joinRoom(code);
                   if (ok) {
                     Navigator.pop(ctx);
                     if (mounted) {
                       navigator.push(MaterialPageRoute(
-                        builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
+                        builder: (_) => InsideRoomScreen(
+                            roomId: room.currentRoom!.id),
                       ));
                     }
                   } else if (room.errorMessage?.contains('already') == true) {
@@ -225,7 +242,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   } else {
                     if (ctx2.mounted) {
                       ScaffoldMessenger.of(ctx2).showSnackBar(
-                        SnackBar(content: Text(room.errorMessage ?? 'Error'),
+                        SnackBar(
+                            content: Text(room.errorMessage ?? 'Error'),
                             backgroundColor: AppColors.danger),
                       );
                     }
@@ -239,7 +257,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
     );
   }
 
-  void _showAlreadyInRoomDialog(RoomProvider room, String value, {bool isCreate = false}) {
+  void _showAlreadyInRoomDialog(RoomProvider room, String value,
+      {bool isCreate = false}) {
     final navigator = Navigator.of(context);
     showDialog(
       context: context,
@@ -253,7 +272,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () async {
@@ -264,7 +284,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   : await room.joinRoom(value);
               if (ok && mounted) {
                 navigator.push(MaterialPageRoute(
-                  builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
+                  builder: (_) =>
+                      InsideRoomScreen(roomId: room.currentRoom!.id),
                 ));
               }
             },
@@ -314,11 +335,14 @@ class _ActionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: const TextStyle(fontSize: 16,
-                        fontWeight: FontWeight.w600, color: Colors.white)),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white)),
                 const SizedBox(height: 4),
                 Text(subtitle,
-                    style: TextStyle(fontSize: 13,
+                    style: TextStyle(
+                        fontSize: 13,
                         color: Colors.white.withOpacity(0.7))),
               ],
             ),
@@ -343,8 +367,9 @@ class _HintRow extends StatelessWidget {
       children: [
         Text(icon, style: const TextStyle(fontSize: 16)),
         const SizedBox(width: 10),
-        Text(text, style: const TextStyle(
-            color: AppColors.textSecondary, fontSize: 13)),
+        Text(text,
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 13)),
       ],
     );
   }
@@ -376,12 +401,16 @@ class _RejoinBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Currently in a room',
-                      style: TextStyle(color: AppColors.primary,
-                          fontWeight: FontWeight.w600, fontSize: 13)),
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
                   const SizedBox(height: 2),
                   Text(roomName,
-                      style: const TextStyle(color: AppColors.textPrimary,
-                          fontSize: 15, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ),

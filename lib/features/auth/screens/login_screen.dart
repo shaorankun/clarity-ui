@@ -28,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     final auth = context.read<AuthProvider>();
     await auth.login(_emailCtrl.text.trim(), _passwordCtrl.text);
-    // Router sẽ tự redirect khi status thay đổi
   }
 
   @override
@@ -44,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight:
-                    MediaQuery.of(context).size.height -
+                MediaQuery.of(context).size.height -
                     MediaQuery.of(context).padding.top -
                     MediaQuery.of(context).padding.bottom,
               ),
@@ -63,12 +62,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Đăng nhập để tiếp tục',
+                      'Sign in to continue',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: 32),
 
-                    // Email
                     TextField(
                       controller: _emailCtrl,
                       keyboardType: TextInputType.emailAddress,
@@ -77,7 +75,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Password
                     TextField(
                       controller: _passwordCtrl,
                       obscureText: _obscure,
@@ -95,7 +92,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Error
                     if (auth.errorMessage != null)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -110,13 +106,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     const SizedBox(height: 16),
                     AppButton(
-                      label: 'Đăng nhập',
+                      label: 'Sign In',
                       isLoading: auth.isLoading,
                       onPressed: _login,
                     ),
                     const SizedBox(height: 16),
 
-                    // Go to register
                     Center(
                       child: GestureDetector(
                         onTap: widget.onGoRegister,
@@ -124,13 +119,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextSpan(
                             children: [
                               TextSpan(
-                                text: 'Chưa có tài khoản? ',
+                                text: "Don't have an account? ",
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                 ),
                               ),
                               TextSpan(
-                                text: 'Đăng ký',
+                                text: 'Sign Up',
                                 style: TextStyle(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.w600,

@@ -47,6 +47,8 @@ dependencies:
   # Misc
   intl: ^0.19.0
 
+  flutter_local_notifications: ^19.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

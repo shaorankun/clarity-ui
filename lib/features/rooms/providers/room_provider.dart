@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/notification_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../models/room_model.dart';
 
@@ -16,6 +17,7 @@ class RoomProvider extends ChangeNotifier {
   // Countdown timer
   int remainingSeconds = 0;
   Timer? _countdown;
+  Timer? _pollingTimer;
 
   String? _currentSessionId;
 
@@ -98,6 +100,7 @@ class RoomProvider extends ChangeNotifier {
 
   Future<void> connectWebSocket(String roomId) async {
     final token = await TokenStorage.getAccessToken();
+
     if (token == null) {
       print('=== WS: No token, abort');
       return;
@@ -162,6 +165,22 @@ class RoomProvider extends ChangeNotifier {
       ),
     );
     _stompClient!.activate();
+
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _refreshMembers(roomId);
+    });
+  }
+
+  Future<void> _refreshMembers(String roomId) async {
+    try {
+      final res = await _dio.get('/api/rooms/$roomId');
+      final updatedRoom = StudyRoom.fromJson(res.data);
+      // Chỉ update nếu member list thay đổi
+      if (updatedRoom.members.length != currentRoom?.members.length) {
+        currentRoom = updatedRoom;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   // ── Owner controls ────────────────────────────────────
@@ -207,7 +226,7 @@ class RoomProvider extends ChangeNotifier {
 
     remainingSeconds = roomSession!.remainingSeconds;
 
-    _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
+    _countdown = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (remainingSeconds > 0) {
         remainingSeconds--;
         notifyListeners();
@@ -215,7 +234,10 @@ class RoomProvider extends ChangeNotifier {
         _countdown?.cancel();
         print('=== Countdown done, status=${roomSession?.status}');
         if (roomSession?.status == 'FOCUSING') {
-          _completeSession();
+          await _completeSession();
+          await NotificationService.showFocusComplete();
+        } else if (roomSession?.status == 'BREAK') {
+          await NotificationService.showBreakComplete();
         }
       }
     });
@@ -233,6 +255,7 @@ class RoomProvider extends ChangeNotifier {
 
   void _cleanup() {
     _countdown?.cancel();
+    _pollingTimer?.cancel();
     _stompClient?.deactivate();
     currentRoom      = null;
     roomSession      = null;

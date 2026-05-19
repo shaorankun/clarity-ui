@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'core/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/network/app_router.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -8,7 +9,9 @@ import 'features/tasks/providers/task_provider.dart';
 import 'features/stats/providers/stats_provider.dart';
 import 'features/rooms/providers/room_provider.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.init();
   runApp(
     MultiProvider(
       providers: [

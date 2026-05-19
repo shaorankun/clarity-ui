@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/notification_service.dart';
 
 enum TimerMode { focus, shortBreak, longBreak }
 enum TimerStatus { idle, running, paused }
@@ -57,7 +58,8 @@ class TimerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> start() async {
+  Future<void> start({bool inRoom = false}) async {
+    if (inRoom) return;
     if (mode == TimerMode.focus) {
       try {
         final res = await _dio.post('/api/sessions/start', data: {
@@ -111,6 +113,9 @@ class TimerProvider extends ChangeNotifier {
     if (mode == TimerMode.focus) {
       sessions++;
       await _endSession('COMPLETED');
+      await NotificationService.showFocusComplete();
+    } else {
+      await NotificationService.showBreakComplete();
     }
     remaining = _durations[mode]!;
     notifyListeners();

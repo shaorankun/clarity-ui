@@ -42,77 +42,111 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Spacer(),
-                const Text('Tạo tài khoản ✦',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary)),
-                const SizedBox(height: 8),
-                const Text('Bắt đầu hành trình tập trung của bạn',
-                    style: TextStyle(color: AppColors.textSecondary)),
-                const SizedBox(height: 32),
-
-                TextField(
-                  maxLength: 12,
-                  controller: _nameCtrl,
-                  style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(hintText: 'Display name'),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(hintText: 'Email'),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _passwordCtrl,
-                  obscureText: _obscure,
-                  style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: InputDecoration(
-                    hintText: 'Password',
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                          color: AppColors.textMuted),
-                      onPressed: () => setState(() => _obscure = !_obscure),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight:
+                MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom,
+              ),
+              child: IntrinsicHeight(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Spacer(),
+                    const Text(
+                      'Create account ✦',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Start your focus journey today',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 32),
 
-                if (auth.errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(auth.errorMessage!,
-                        style: const TextStyle(color: AppColors.danger, fontSize: 13)),
-                  ),
+                    TextField(
+                      maxLength: 12,
+                      controller: _nameCtrl,
+                      style: const TextStyle(color: AppColors.textPrimary),
+                      decoration: const InputDecoration(hintText: 'Display name'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      style: const TextStyle(color: AppColors.textPrimary),
+                      decoration: const InputDecoration(hintText: 'Email'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordCtrl,
+                      obscureText: _obscure,
+                      style: const TextStyle(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscure ? Icons.visibility_off : Icons.visibility,
+                            color: AppColors.textMuted,
+                          ),
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                const SizedBox(height: 16),
-                AppButton(
-                  label: 'Đăng ký',
-                  isLoading: auth.isLoading,
-                  onPressed: _register,
+                    if (auth.errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          auth.errorMessage!,
+                          style: const TextStyle(
+                            color: AppColors.danger,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 16),
+                    AppButton(
+                      label: 'Sign Up',
+                      isLoading: auth.isLoading,
+                      onPressed: _register,
+                    ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: GestureDetector(
+                        onTap: widget.onGoLogin,
+                        child: const Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Already have an account? ',
+                                style: TextStyle(color: AppColors.textSecondary),
+                              ),
+                              TextSpan(
+                                text: 'Sign In',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                Center(
-                  child: GestureDetector(
-                    onTap: widget.onGoLogin,
-                    child: const Text.rich(TextSpan(children: [
-                      TextSpan(text: 'Đã có tài khoản? ',
-                          style: TextStyle(color: AppColors.textSecondary)),
-                      TextSpan(text: 'Đăng nhập',
-                          style: TextStyle(color: AppColors.primary,
-                              fontWeight: FontWeight.w600)),
-                    ])),
-                  ),
-                ),
-                const Spacer(),
-              ],
+              ),
             ),
           ),
         ),

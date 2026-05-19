@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/circular_timer.dart';
 import '../../tasks/providers/task_provider.dart';
+import '../../rooms/providers/room_provider.dart';
 
 class TimerScreen extends StatelessWidget {
   const TimerScreen({super.key});
@@ -12,6 +13,8 @@ class TimerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timer = context.watch<TimerProvider>();
+    final room = context.watch<RoomProvider>();
+    final inRoom = room.currentRoom != null;
 
     return Container(
       decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
@@ -140,7 +143,22 @@ class TimerScreen extends StatelessWidget {
 
               // Controls
               if (timer.status == TimerStatus.idle)
-                AppButton(label: 'Start Focus', onPressed: timer.start)
+                Column(
+                  children: [
+                    AppButton(
+                      label: 'Start Focus',
+                      onPressed: inRoom ? null : () => timer.start(inRoom: false),
+                    ),
+                    if (inRoom) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Leave your study room to start a solo session',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                )
               else
                 Row(
                   children: [
