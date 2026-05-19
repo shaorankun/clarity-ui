@@ -147,12 +147,14 @@ class TimerScreen extends StatelessWidget {
                         )
                       else
                         _BreakStartButton(
-                          onTap: () => timer.start(inRoom: false),
+                          onTap: inRoom ? null : () => timer.start(inRoom: false),
                         ),
-                      if (inRoom && isFocus) ...[
+                      if (inRoom) ...[
                         const SizedBox(height: 10),
                         Text(
-                          'Leave your study room to start a solo session',
+                          isFocus
+                              ? 'Leave your study room to start a solo session'
+                              : 'Leave your study room to start a solo break',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: _kOnSurfaceVar.withOpacity(0.6), fontSize: 12),
                         ),
@@ -342,7 +344,7 @@ class _SelectTaskStartButton extends StatelessWidget {
 
 // ─── Start button (Break mode) ────────────────────────────────────────────────
 class _BreakStartButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _BreakStartButton({required this.onTap});
 
   @override
@@ -359,6 +361,8 @@ class _BreakStartButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: _kPrimaryContainer,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: _kSurface,
+          disabledForegroundColor: _kOnSurfaceVar.withOpacity(0.4),
           shape: const StadiumBorder(),
           elevation: 0,
           shadowColor: Colors.transparent,
