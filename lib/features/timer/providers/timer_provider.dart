@@ -2,22 +2,28 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/notification_service.dart';
+import '../../../core/storage/token_storage.dart';
 
 enum TimerMode { focus, shortBreak, longBreak }
 enum TimerStatus { idle, running, paused }
 
 class TimerProvider extends ChangeNotifier {
-  // Config (seconds)
   static const Map<TimerMode, int> _durations = {
-    TimerMode.focus:      25 * 60,
+    TimerMode.focus:      1 * 60,
     TimerMode.shortBreak: 5  * 60,
     TimerMode.longBreak:  15 * 60,
   };
 
+  // Storage keys
+  static const _kSessions      = 'timer_sessions';
+  static const _kFocusedSecs   = 'timer_focused_seconds';
+  static const _kSavedDate     = 'timer_saved_date';
+
   TimerMode   mode      = TimerMode.focus;
   TimerStatus status    = TimerStatus.idle;
-  int         remaining = 25 * 60;
-  int         sessions  = 0; // completed focus sessions today
+  int         remaining = 1 * 60;
+  int         sessions  = 0;
+  int         focusedSeconds = 0; // tổng giây đã focus hôm nay
 
   String? selectedTaskId;
   String? selectedTaskTitle;
@@ -26,7 +32,6 @@ class TimerProvider extends ChangeNotifier {
   Timer? _ticker;
   final _dio = DioClient.instance;
 
-  // ── Getters ──────────────────────────────────────────
   int get total => _durations[mode]!;
   double get progress => 1 - (remaining / total);
 
@@ -44,7 +49,40 @@ class TimerProvider extends ChangeNotifier {
     }
   }
 
-  // ── Actions ──────────────────────────────────────────
+  // ── Persist helpers ──────────────────────────────────────────────────────────
+
+  String _todayKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+  }
+
+  /// Gọi khi app khởi động — load sessions & focusedSeconds, reset nếu sang ngày mới
+  Future<void> loadPersistedStats() async {
+    final savedDate = await TokenStorage.readRaw(_kSavedDate);
+    final today = _todayKey();
+
+    if (savedDate != today) {
+      // Sang ngày mới → reset
+      sessions       = 0;
+      focusedSeconds = 0;
+      await _persistStats();
+    } else {
+      final s = await TokenStorage.readRaw(_kSessions);
+      final f = await TokenStorage.readRaw(_kFocusedSecs);
+      sessions       = int.tryParse(s ?? '0') ?? 0;
+      focusedSeconds = int.tryParse(f ?? '0') ?? 0;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _persistStats() async {
+    await TokenStorage.writeRaw(_kSessions,    sessions.toString());
+    await TokenStorage.writeRaw(_kFocusedSecs, focusedSeconds.toString());
+    await TokenStorage.writeRaw(_kSavedDate,   _todayKey());
+  }
+
+  // ── Timer logic ──────────────────────────────────────────────────────────────
+
   void setMode(TimerMode m) {
     if (status == TimerStatus.running) return;
     mode      = m;
@@ -83,7 +121,6 @@ class TimerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Resume chỉ restart ticker, không tạo session mới
   void resume() {
     status = TimerStatus.running;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
@@ -95,12 +132,20 @@ class TimerProvider extends ChangeNotifier {
     await _endSession('ABANDONED');
     status    = TimerStatus.idle;
     remaining = _durations[mode]!;
+    selectedTaskId    = null;
+    selectedTaskTitle = null;
     notifyListeners();
   }
 
   void _tick() {
     if (remaining > 0) {
       remaining--;
+      // Đếm thêm 1 giây focused nếu đang focus mode
+      if (mode == TimerMode.focus) {
+        focusedSeconds++;
+        // Persist mỗi 30s để tránh write quá nhiều
+        if (focusedSeconds % 30 == 0) _persistStats();
+      }
       notifyListeners();
     } else {
       _onComplete();
@@ -114,6 +159,9 @@ class TimerProvider extends ChangeNotifier {
       sessions++;
       await _endSession('COMPLETED');
       await NotificationService.showFocusComplete();
+      await _persistStats();
+      selectedTaskId    = null;
+      selectedTaskTitle = null;
     } else {
       await NotificationService.showBreakComplete();
     }

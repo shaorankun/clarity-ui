@@ -29,6 +29,15 @@ class TokenStorage {
   static Future<String?> getAccessToken()  async => _storage.read(key: _accessKey);
   static Future<String?> getRefreshToken() async => _storage.read(key: _refreshKey);
 
+  static Future<void> clearTokens() async {
+    await _storage.delete(key: _accessKey);
+    await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _userKey);
+  }
+
+  // Generic key-value helpers cho các feature khác (e.g. TimerProvider)
+  static Future<String?> readRaw(String key)               async => _storage.read(key: key);
+  static Future<void>    writeRaw(String key, String value) async => _storage.write(key: key, value: value);
   static Future<void> clearTokens() async => _storage.deleteAll();
 
   static Future<void> saveRoomId(String roomId) async {
