@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/stats_provider.dart';
 import '../models/stats_model.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/providers/auth_provider.dart';
 
 // ── Design tokens (mirrors Stitch / app_colors) ──────────────────────────────
 class _C {
@@ -64,21 +65,30 @@ class _StatsScreenState extends State<StatsScreen> {
         ),
       ),
       child: SafeArea(
-        child: stats.isLoading
-            ? const Center(
-          child: CircularProgressIndicator(
-            color: _C.primary,
-            strokeWidth: 2,
-          ),
-        )
-            : stats.overview == null
-            ? const Center(
-          child: Text(
-            'No data yet',
-            style: TextStyle(color: _C.outline),
-          ),
-        )
-            : _buildContent(context, stats),
+        child: Column(
+          children: [
+            // ── Top App Bar ────────────────────────────────────────────────
+            _TopAppBar(),
+            // ── Content ───────────────────────────────────────────────────
+            Expanded(
+              child: stats.isLoading
+                  ? const Center(
+                child: CircularProgressIndicator(
+                  color: _C.primary,
+                  strokeWidth: 2,
+                ),
+              )
+                  : stats.overview == null
+                  ? const Center(
+                child: Text(
+                  'No data yet',
+                  style: TextStyle(color: _C.outline),
+                ),
+              )
+                  : _buildContent(context, stats),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -100,7 +110,7 @@ class _StatsScreenState extends State<StatsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──────────────────────────────────────────────────────────
+          // ── Section Header ───────────────────────────────────────────────
           const Text(
             'Stats',
             style: TextStyle(
@@ -213,7 +223,7 @@ class _StatsScreenState extends State<StatsScreen> {
                     ),
                   ),
                 )
-                    : _WeeklyBarChart(weekly: o.weekly),
+                    : _WeeklyBarChart(weekly: o.weekly, stats: stats),
               ],
             ),
           ),
@@ -223,6 +233,89 @@ class _StatsScreenState extends State<StatsScreen> {
           _PersonalBestCard(weekly: o.weekly, stats: stats),
           const SizedBox(height: 8),
         ],
+      ),
+    );
+  }
+}
+
+// ── Top App Bar ───────────────────────────────────────────────────────────────
+class _TopAppBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final user = auth.user;
+    final initial = (user?.displayName.isNotEmpty == true)
+        ? user!.displayName[0].toUpperCase()
+        : '?';
+
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: const Color(0xFF12121D).withOpacity(0.8),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6C3CE0).withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Menu icon (left)
+            GestureDetector(
+              onTap: () {},
+              child: const Icon(
+                Icons.menu,
+                color: _C.primary,
+                size: 24,
+              ),
+            ),
+
+            // Logo (center)
+            const Text(
+              'Clarity',
+              style: TextStyle(
+                fontFamily: 'SpaceGrotesk',
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: _C.primary,
+                letterSpacing: -0.3,
+              ),
+            ),
+
+            // Avatar (right)
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF6C3CE0).withOpacity(0.35),
+                border: Border.all(
+                  color: _C.primary.withOpacity(0.2),
+                  width: 1.5,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontFamily: 'SpaceGrotesk',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _C.primary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -267,7 +360,7 @@ class _MetricCard extends StatelessWidget {
   final Color iconColor;
   final String value;
   final String unit;
-  final String? subUnit; // e.g. "30m" shown after the primary unit
+  final String? subUnit;
   final Color valueColor;
 
   const _MetricCard({
@@ -374,6 +467,7 @@ class _TodayCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final focusLabel = today != null ? stats.formatMinutes(today!.totalMinutes) : '0m';
     final sessions   = today?.sessionCount ?? 0;
+    // tasks completed = số task đã được đánh dấu hoàn thành trong ngày (từ API stats/daily)
     final tasks      = today?.tasksCompleted ?? 0;
 
     return _GlassCard(
@@ -403,7 +497,7 @@ class _TodayCard extends StatelessWidget {
               width: 1,
             ),
             _TodayItem(
-              label: 'TASKS COMPLETED',
+              label: 'TASKS DONE',
               value: '$tasks',
               valueColor: _C.tertiary,
             ),
@@ -458,19 +552,31 @@ class _TodayItem extends StatelessWidget {
 }
 
 // ── Weekly Bar Chart ──────────────────────────────────────────────────────────
-class _WeeklyBarChart extends StatelessWidget {
+// ── Weekly Bar Chart (Đã sửa đổi hiển thị tooltip trên đầu cột) ────────────────
+class _WeeklyBarChart extends StatefulWidget {
   final List<DailyStats> weekly;
-  const _WeeklyBarChart({required this.weekly});
+  final StatsProvider stats;
+
+  const _WeeklyBarChart({required this.weekly, required this.stats});
+
+  @override
+  State<_WeeklyBarChart> createState() => _WeeklyBarChartState();
+}
+
+class _WeeklyBarChartState extends State<_WeeklyBarChart> {
+  int _selectedIndex = -1;
 
   @override
   Widget build(BuildContext context) {
+    final weekly     = widget.weekly;
     final maxMinutes = weekly.map((d) => d.totalMinutes).fold(0, (a, b) => a > b ? a : b);
     const dayLabels  = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    const barHeight  = 100.0;
+    const barHeight  = 100.0; // Chiều cao tối đa của cột
     const minBar     = 6.0;
 
     return SizedBox(
-      height: barHeight + 32,
+      // Tăng chiều cao tổng thể một chút để có chỗ cho text hiện lên trên đầu cột
+      height: barHeight + 50,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -478,129 +584,102 @@ class _WeeklyBarChart extends StatelessWidget {
           final d       = weekly[i];
           final ratio   = maxMinutes == 0 ? 0.0 : d.totalMinutes / maxMinutes;
           final isToday = i == weekly.length - 1;
+          final isSelected = _selectedIndex == i;
           final barH    = ratio == 0 ? minBar : (barHeight * ratio).clamp(minBar, barHeight);
 
-          // Compute day label index based on today's weekday
-          final todayWd  = DateTime.now().weekday; // 1=Mon..7=Sun
+          final todayWd  = DateTime.now().weekday;
           final dayIdx   = ((todayWd - 1) - (weekly.length - 1 - i)) % 7;
           final label    = dayLabels[dayIdx < 0 ? dayIdx + 7 : dayIdx];
 
           return Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                AnimatedContainer(
-                  duration: Duration(milliseconds: 400 + i * 60),
-                  curve: Curves.easeOut,
-                  height: barH,
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    gradient: isToday
-                        ? const LinearGradient(
-                      colors: [Color(0xFFCEBDFF), Color(0xFFB89CFF)],
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                    )
-                        : LinearGradient(
-                      colors: [
-                        const Color(0xFF6C3CE0).withOpacity(0.25),
-                        const Color(0xFF6C3CE0).withOpacity(0.15),
-                      ],
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                    ),
-                    boxShadow: isToday
-                        ? [
-                      BoxShadow(
-                        color: const Color(0xFF6C3CE0).withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
-                    color: isToday ? _C.primary : _C.outline,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-// ── Task Completion Card ──────────────────────────────────────────────────────
-class _TaskCompletionCard extends StatelessWidget {
-  final DailyStats today;
-  const _TaskCompletionCard({required this.today});
-
-  @override
-  Widget build(BuildContext context) {
-    // Simple heuristic: completed / (completed + 2 remaining)
-    final completed = today.tasksCompleted;
-    final total     = completed > 0 ? completed + 2 : 8;
-    final pct       = total == 0 ? 0.0 : (completed / total).clamp(0.0, 1.0);
-    final pctLabel  = '${(pct * 100).round()}%';
-
-    return _GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedIndex = (_selectedIndex == i) ? -1 : i;
+                });
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  const Text(
-                    'Task Completion',
-                    style: TextStyle(
-                      fontFamily: 'SpaceGrotesk',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: _C.onSurface,
+                  // THỜI GIAN HIỆN TRÊN ĐẦU CỘT
+                  Opacity(
+                    opacity: isSelected ? 1.0 : 0.0, // Chỉ hiện khi được chọn
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        widget.stats.formatMinutes(d.totalMinutes),
+                        style: const TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 10, // Kích thước nhỏ gọn
+                          fontWeight: FontWeight.w700,
+                          color: _C.primary,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
+
+                  // CỘT BIỂU ĐỒ
+                  AnimatedContainer(
+                    duration: Duration(milliseconds: 400 + i * 60),
+                    curve: Curves.easeOut,
+                    height: barH,
+                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      gradient: isToday || isSelected
+                          ? LinearGradient(
+                        colors: isSelected && !isToday
+                            ? [
+                          const Color(0xFFCEBDFF).withOpacity(0.7),
+                          const Color(0xFFB89CFF).withOpacity(0.5),
+                        ]
+                            : const [
+                          Color(0xFFCEBDFF),
+                          Color(0xFFB89CFF),
+                        ],
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                      )
+                          : LinearGradient(
+                        colors: [
+                          const Color(0xFF6C3CE0).withOpacity(0.25),
+                          const Color(0xFF6C3CE0).withOpacity(0.15),
+                        ],
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                      ),
+                      boxShadow: isToday || isSelected
+                          ? [
+                        BoxShadow(
+                          color: const Color(0xFF6C3CE0)
+                              .withOpacity(isSelected ? 0.55 : 0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // NHÃN THỨ (M, T, W...)
                   Text(
-                    '$completed of $total goals met',
-                    style: const TextStyle(fontSize: 13, color: _C.outline),
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: (isToday || isSelected)
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: (isToday || isSelected) ? _C.primary : _C.outline,
+                    ),
                   ),
                 ],
               ),
-              Text(
-                pctLabel,
-                style: const TextStyle(
-                  fontFamily: 'SpaceGrotesk',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: _C.tertiary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 8,
-              backgroundColor: _C.surfaceHighest,
-              valueColor: const AlwaysStoppedAnimation<Color>(_C.secondary),
             ),
-          ),
-        ],
+          );
+        }),
       ),
     );
   }
