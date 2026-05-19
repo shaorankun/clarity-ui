@@ -25,6 +25,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
     });
   }
 
+  void _navigateToRoom(BuildContext context, String roomId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => InsideRoomScreen(roomId: roomId)),
+    ).then((_) {
+      if (mounted) context.read<RoomProvider>().fetchPublicRooms();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = context.watch<RoomProvider>();
@@ -48,10 +57,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
               if (room.currentRoom != null) ...[
                 _RejoinBanner(
                   roomName: room.currentRoom!.name,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => InsideRoomScreen(
-                        roomId: room.currentRoom!.id),
-                  )),
+                  onTap: () => _navigateToRoom(context, room.currentRoom!.id),
                 ),
                 const SizedBox(height: 24),
                 const Divider(color: AppColors.surfaceLight),
@@ -102,12 +108,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   child: _PublicRoomCard(
                     room: r,
                     onTap: () async {
-                      final navigator = Navigator.of(context);
                       final ok = await room.joinPublicRoom(r.id);
                       if (ok && mounted) {
-                        navigator.push(MaterialPageRoute(
-                          builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
-                        ));
+                        _navigateToRoom(context, room.currentRoom!.id);
                       }
                     },
                   ),
@@ -136,86 +139,94 @@ class _RoomsScreenState extends State<RoomsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Create a Room',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary)),
-                IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textMuted),
-                  onPressed: () {
-                    setState(() => _isPublic = false);
-                    Navigator.pop(ctx);
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Create a Room',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    onPressed: () {
+                      setState(() => _isPublic = false);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: const InputDecoration(hintText: 'Room name...'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Public room',
+                      style: TextStyle(color: AppColors.textSecondary)),
+                  GestureDetector(
+                    onTap: () => setSheetState(() => _isPublic = !_isPublic),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _isPublic ? AppColors.primary : AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _isPublic ? 'Public' : 'Private',
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Consumer<RoomProvider>(
+                builder: (ctx2, room, _) => AppButton(
+                  label: 'Create Room',
+                  isLoading: room.isLoading,
+                  onPressed: () async {
+                    if (ctrl.text.trim().isEmpty) return;
+                    final name = ctrl.text.trim();
+                    await _abandonSoloIfRunning();
+                    final ok = await room.createRoom(name, isPublic: _isPublic);
+                    if (ok) {
+                      setState(() => _isPublic = false);
+                      Navigator.pop(ctx);
+                      if (mounted) {
+                        _navigateToRoom(context, room.currentRoom!.id);
+                      }
+                    } else if (room.errorMessage?.contains('already') == true) {
+                      setState(() => _isPublic = false);
+                      Navigator.pop(ctx);
+                      if (mounted) {
+                        _showAlreadyInRoomDialog(room, name, isCreate: true);
+                      }
+                    } else {
+                      if (ctx2.mounted) {
+                        ScaffoldMessenger.of(ctx2).showSnackBar(
+                          SnackBar(
+                              content: Text(room.errorMessage ?? 'Error'),
+                              backgroundColor: AppColors.danger),
+                        );
+                      }
+                    }
                   },
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(hintText: 'Room name...'),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Public room',
-                    style: TextStyle(color: AppColors.textSecondary)),
-                Switch(
-                  value: _isPublic,
-                  onChanged: (val) => setState(() => _isPublic = val),
-                  activeColor: AppColors.primary,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Consumer<RoomProvider>(
-              builder: (ctx2, room, _) => AppButton(
-                label: 'Create Room',
-                isLoading: room.isLoading,
-                onPressed: () async {
-                  if (ctrl.text.trim().isEmpty) return;
-                  final name = ctrl.text.trim();
-                  final navigator = Navigator.of(context);
-                  await _abandonSoloIfRunning();
-                  final ok = await room.createRoom(name, isPublic: _isPublic);
-                  if (ok) {
-                    setState(() => _isPublic = false);
-                    Navigator.pop(ctx);
-                    if (mounted) {
-                      navigator.push(MaterialPageRoute(
-                        builder: (_) => InsideRoomScreen(roomId: room.currentRoom!.id),
-                      ));
-                    }
-                  } else if (room.errorMessage?.contains('already') == true) {
-                    setState(() => _isPublic = false);
-                    Navigator.pop(ctx);
-                    if (mounted) {
-                      _showAlreadyInRoomDialog(room, name, isCreate: true);
-                    }
-                  } else {
-                    if (ctx2.mounted) {
-                      ScaffoldMessenger.of(ctx2).showSnackBar(
-                        SnackBar(
-                            content: Text(room.errorMessage ?? 'Error'),
-                            backgroundColor: AppColors.danger),
-                      );
-                    }
-                  }
-                },
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -273,19 +284,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 onPressed: () async {
                   if (ctrl.text.trim().length != 6) return;
                   final code = ctrl.text.trim();
-                  final navigator = Navigator.of(context);
-
-                  // Abandon solo session nếu đang chạy
                   await _abandonSoloIfRunning();
-
                   final ok = await room.joinRoom(code);
                   if (ok) {
                     Navigator.pop(ctx);
                     if (mounted) {
-                      navigator.push(MaterialPageRoute(
-                        builder: (_) => InsideRoomScreen(
-                            roomId: room.currentRoom!.id),
-                      ));
+                      _navigateToRoom(context, room.currentRoom!.id);
                     }
                   } else if (room.errorMessage?.contains('already') == true) {
                     Navigator.pop(ctx);
@@ -336,10 +340,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   ? await room.createRoom(value)
                   : await room.joinRoom(value);
               if (ok && mounted) {
-                navigator.push(MaterialPageRoute(
-                  builder: (_) =>
-                      InsideRoomScreen(roomId: room.currentRoom!.id),
-                ));
+                _navigateToRoom(context, room.currentRoom!.id);
               }
             },
             child: Text(
