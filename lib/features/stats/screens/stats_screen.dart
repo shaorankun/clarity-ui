@@ -4,6 +4,7 @@ import '../providers/stats_provider.dart';
 import '../models/stats_model.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../tasks/providers/task_provider.dart';
 
 // ── Design tokens (mirrors Stitch / app_colors) ──────────────────────────────
 class _C {
@@ -467,8 +468,8 @@ class _TodayCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final focusLabel = today != null ? stats.formatMinutes(today!.totalMinutes) : '0m';
     final sessions   = today?.sessionCount ?? 0;
-    // tasks completed = số task đã được đánh dấu hoàn thành trong ngày (từ API stats/daily)
-    final tasks      = today?.tasksCompleted ?? 0;
+    // Đọc trực tiếp từ TaskProvider để phản ánh ngay khi user toggle task
+    final tasks      = context.watch<TaskProvider>().completed.length;
 
     return _GlassCard(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),

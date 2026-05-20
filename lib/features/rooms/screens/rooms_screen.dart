@@ -7,6 +7,24 @@ import '../../../shared/widgets/app_button.dart';
 import '../../../features/timer/providers/timer_provider.dart';
 import 'inside_room_screen.dart';
 
+// ── Design tokens ─────────────────────────────────────────
+class _C {
+  static const bg                   = Color(0xFF12121D);
+  static const surface              = Color(0xFF1F1E2A);
+  static const surfaceContLow       = Color(0xFF1B1A26);
+  static const surfaceContHigh      = Color(0xFF292935);
+  static const surfaceVariant       = Color(0xFF343440);
+  static const primary              = Color(0xFFCEBDFF);
+  static const primaryContainer     = Color(0xFF6C3CE0);
+  static const onPrimaryContainer   = Color(0xFFE2D6FF);
+  static const onSurface            = Color(0xFFE3E0F1);
+  static const onSurfaceVar         = Color(0xFFCBC3D7);
+  static const outline              = Color(0xFF948EA1);
+  static const outlineVar           = Color(0xFF494455);
+  static const tertiary             = Color(0xFF00DBE9);
+  static const secondary            = Color(0xFFD2BBFF);
+}
+
 class RoomsScreen extends StatefulWidget {
   const RoomsScreen({super.key});
 
@@ -39,84 +57,139 @@ class _RoomsScreenState extends State<RoomsScreen> {
     final room = context.watch<RoomProvider>();
 
     return Container(
-      decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+      color: _C.bg,
       child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Study Rooms',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary)),
-              const SizedBox(height: 8),
-              const Text('Focus together, achieve more',
-                  style: TextStyle(color: AppColors.textSecondary)),
-              const SizedBox(height: 32),
-
-              if (room.currentRoom != null) ...[
-                _RejoinBanner(
-                  roomName: room.currentRoom!.name,
-                  onTap: () => _navigateToRoom(context, room.currentRoom!.id),
+        child: Stack(
+          children: [
+            // Background glow
+            Positioned(
+              top: -60, right: -60,
+              child: Container(
+                width: 240, height: 240,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _C.primaryContainer.withOpacity(0.08),
                 ),
-                const SizedBox(height: 24),
-                const Divider(color: AppColors.surfaceLight),
-                const SizedBox(height: 24),
-              ],
-
-              _ActionCard(
-                icon: '🚪',
-                title: 'Create a Room',
-                subtitle: 'Start a session and invite friends',
-                gradient: true,
-                onTap: () => _showCreateRoom(context),
               ),
-              const SizedBox(height: 16),
+            ),
 
-              _ActionCard(
-                icon: '🔑',
-                title: 'Join with Code',
-                subtitle: 'Enter a 6-character invite code',
-                gradient: false,
-                onTap: () => _showJoinRoom(context),
-              ),
+            Column(
+              children: [
+                _TopAppBar(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
 
-              const SizedBox(height: 32),
-              const Text('How it works',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary)),
-              const SizedBox(height: 12),
-              const _HintRow(icon: '👑', text: 'Room owner controls Start, Break & End'),
-              const SizedBox(height: 8),
-              const _HintRow(icon: '🔄', text: 'Timer syncs in real-time for everyone'),
-              const SizedBox(height: 8),
-              const _HintRow(icon: '📤', text: 'Share your invite code to let others join'),
+                        // ── Rejoin Banner ──────────────────────────
+                        if (room.currentRoom != null) ...[
+                          _RejoinBanner(
+                            roomName: room.currentRoom!.name,
+                            onTap: () => _navigateToRoom(context, room.currentRoom!.id),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
 
-              const SizedBox(height: 32),
-              const Text('Public Rooms',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary)),
-              const SizedBox(height: 12),
-              if (room.isLoadingPublic)
-                const Center(child: CircularProgressIndicator())
-              else if (room.publicRooms.isEmpty)
-                const Text('No public rooms available',
-                    style: TextStyle(color: AppColors.textSecondary))
-              else
-                ...room.publicRooms.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _PublicRoomCard(
-                    room: r,
-                    onTap: () async {
-                      final ok = await room.joinPublicRoom(r.id);
-                      if (ok && mounted) {
-                        _navigateToRoom(context, room.currentRoom!.id);
-                      }
-                    },
+                        // ── Action Buttons ─────────────────────────
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _PrimaryActionButton(
+                                icon: Icons.add_circle_outline_rounded,
+                                label: 'Create Room',
+                                onTap: () => _showCreateRoom(context),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _SecondaryActionButton(
+                                icon: Icons.login_rounded,
+                                label: 'Join Room',
+                                onTap: () => _showJoinRoom(context),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+
+                        // ── Active Rooms Header ────────────────────
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Active Rooms',
+                              style: TextStyle(
+                                fontFamily: 'SpaceGrotesk',
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                color: _C.onSurface,
+                              ),
+                            ),
+                            if (!room.isLoadingPublic)
+                              Text(
+                                '${room.publicRooms.length} Live',
+                                style: const TextStyle(
+                                  fontFamily: 'SpaceGrotesk',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: _C.primary,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ── Room List ──────────────────────────────
+                        if (room.isLoadingPublic)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(32),
+                              child: CircularProgressIndicator(
+                                color: _C.primary, strokeWidth: 2,
+                              ),
+                            ),
+                          )
+                        else if (room.publicRooms.isEmpty)
+                          _EmptyRoomsCard()
+                        else
+                          ...room.publicRooms.asMap().entries.map((entry) {
+                            final r = entry.value;
+                            final isActive = r.members.isNotEmpty;
+                            final isMine = room.currentRoom?.id == r.id;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _RoomCard(
+                                room: r,
+                                isFirst: isActive,
+                                isMine: isMine,
+                                onTap: () async {
+                                  if (isMine) {
+                                    _navigateToRoom(context, r.id);
+                                    return;
+                                  }
+                                  final ok = await room.joinPublicRoom(r.id);
+                                  if (ok && mounted) {
+                                    _navigateToRoom(context, room.currentRoom!.id);
+                                  }
+                                },
+                              ),
+                            );
+                          }),
+
+                        const SizedBox(height: 24),
+
+                        // ── Decorative Banner ──────────────────────
+                        _FlowStateBanner(),
+                      ],
+                    ),
                   ),
-                )),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -135,7 +208,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -147,40 +220,80 @@ class _RoomsScreenState extends State<RoomsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: _C.outlineVar,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Create a Room',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary)),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.textMuted),
-                    onPressed: () {
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w600,
+                          color: _C.onSurface, fontFamily: 'SpaceGrotesk')),
+                  GestureDetector(
+                    onTap: () {
                       setState(() => _isPublic = false);
                       Navigator.pop(ctx);
                     },
+                    child: Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _C.surfaceVariant,
+                      ),
+                      child: const Icon(Icons.close_rounded,
+                          color: _C.onSurfaceVar, size: 18),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               TextField(
                 controller: ctrl,
                 autofocus: true,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: const InputDecoration(hintText: 'Room name...'),
+                style: const TextStyle(color: _C.onSurface),
+                decoration: InputDecoration(
+                  hintText: 'Room name...',
+                  hintStyle: TextStyle(color: _C.onSurfaceVar.withOpacity(0.5)),
+                  filled: true,
+                  fillColor: _C.surfaceContHigh,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: _C.outlineVar.withOpacity(0.4)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: _C.outlineVar.withOpacity(0.4)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: _C.primary, width: 1.5),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Public room',
-                      style: TextStyle(color: AppColors.textSecondary)),
+                      style: TextStyle(color: _C.onSurfaceVar)),
                   GestureDetector(
                     onTap: () => setSheetState(() => _isPublic = !_isPublic),
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: _isPublic ? AppColors.primary : AppColors.surfaceLight,
+                        color: _isPublic
+                            ? _C.primaryContainer
+                            : _C.surfaceContHigh,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -191,12 +304,10 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
               Consumer<RoomProvider>(
-                builder: (ctx2, room, _) => AppButton(
-                  label: 'Create Room',
-                  isLoading: room.isLoading,
-                  onPressed: () async {
+                builder: (ctx2, room, _) => GestureDetector(
+                  onTap: room.isLoading ? null : () async {
                     if (ctrl.text.trim().isEmpty) return;
                     final name = ctrl.text.trim();
                     await _abandonSoloIfRunning();
@@ -204,15 +315,11 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     if (ok) {
                       setState(() => _isPublic = false);
                       Navigator.pop(ctx);
-                      if (mounted) {
-                        _navigateToRoom(context, room.currentRoom!.id);
-                      }
+                      if (mounted) _navigateToRoom(context, room.currentRoom!.id);
                     } else if (room.errorMessage?.contains('already') == true) {
                       setState(() => _isPublic = false);
                       Navigator.pop(ctx);
-                      if (mounted) {
-                        _showAlreadyInRoomDialog(room, name, isCreate: true);
-                      }
+                      if (mounted) _showAlreadyInRoomDialog(room, name, isCreate: true);
                     } else {
                       if (ctx2.mounted) {
                         ScaffoldMessenger.of(ctx2).showSnackBar(
@@ -223,6 +330,34 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       }
                     }
                   },
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _C.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _C.primaryContainer.withOpacity(0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: room.isLoading
+                        ? const SizedBox(
+                      width: 20, height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
+                    )
+                        : const Text('Create Room',
+                        style: TextStyle(
+                          color: _C.onPrimaryContainer,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        )),
+                  ),
                 ),
               ),
             ],
@@ -237,7 +372,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: _C.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -248,54 +383,84 @@ class _RoomsScreenState extends State<RoomsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: _C.outlineVar,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Join a Room',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary)),
-                IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textMuted),
-                  onPressed: () => Navigator.pop(ctx),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600,
+                        color: _C.onSurface, fontFamily: 'SpaceGrotesk')),
+                GestureDetector(
+                  onTap: () => Navigator.pop(ctx),
+                  child: Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle, color: _C.surfaceVariant),
+                    child: const Icon(Icons.close_rounded,
+                        color: _C.onSurfaceVar, size: 18),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             TextField(
               controller: ctrl,
               autofocus: true,
               maxLength: 6,
               style: const TextStyle(
-                color: AppColors.textPrimary,
+                color: _C.onSurface,
                 fontSize: 24,
                 letterSpacing: 8,
                 fontWeight: FontWeight.bold,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'ABC123',
+                hintStyle: TextStyle(
+                    color: _C.onSurfaceVar.withOpacity(0.4),
+                    letterSpacing: 8, fontSize: 24),
                 counterText: '',
+                filled: true,
+                fillColor: _C.surfaceContHigh,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: _C.outlineVar.withOpacity(0.4)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: _C.outlineVar.withOpacity(0.4)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _C.primary, width: 1.5),
+                ),
               ),
             ),
             const SizedBox(height: 20),
             Consumer<RoomProvider>(
-              builder: (ctx2, room, _) => AppButton(
-                label: 'Join Room',
-                isLoading: room.isLoading,
-                onPressed: () async {
+              builder: (ctx2, room, _) => GestureDetector(
+                onTap: room.isLoading ? null : () async {
                   if (ctrl.text.trim().length != 6) return;
                   final code = ctrl.text.trim();
                   await _abandonSoloIfRunning();
                   final ok = await room.joinRoom(code);
                   if (ok) {
                     Navigator.pop(ctx);
-                    if (mounted) {
-                      _navigateToRoom(context, room.currentRoom!.id);
-                    }
+                    if (mounted) _navigateToRoom(context, room.currentRoom!.id);
                   } else if (room.errorMessage?.contains('already') == true) {
                     Navigator.pop(ctx);
-                    if (mounted) {
-                      _showAlreadyInRoomDialog(room, code, isCreate: false);
-                    }
+                    if (mounted) _showAlreadyInRoomDialog(room, code, isCreate: false);
                   } else {
                     if (ctx2.mounted) {
                       ScaffoldMessenger.of(ctx2).showSnackBar(
@@ -306,6 +471,34 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     }
                   }
                 },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _C.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _C.primaryContainer.withOpacity(0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: room.isLoading
+                      ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2),
+                  )
+                      : const Text('Join Room',
+                      style: TextStyle(
+                        color: _C.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      )),
+                ),
               ),
             ),
           ],
@@ -316,21 +509,20 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   void _showAlreadyInRoomDialog(RoomProvider room, String value,
       {bool isCreate = false}) {
-    final navigator = Navigator.of(context);
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: _C.surface,
         title: const Text('Already in a Room',
-            style: TextStyle(color: AppColors.textPrimary)),
+            style: TextStyle(color: _C.onSurface, fontFamily: 'SpaceGrotesk')),
         content: const Text(
             'You are currently in another room. Leave it and join this one?',
-            style: TextStyle(color: AppColors.textSecondary)),
+            style: TextStyle(color: _C.onSurfaceVar)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textMuted)),
+                style: TextStyle(color: _C.outline)),
           ),
           TextButton(
             onPressed: () async {
@@ -345,7 +537,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
             },
             child: Text(
               isCreate ? 'Leave & Create' : 'Leave & Join',
-              style: const TextStyle(color: AppColors.primary),
+              style: const TextStyle(color: _C.primary),
             ),
           ),
         ],
@@ -354,55 +546,87 @@ class _RoomsScreenState extends State<RoomsScreen> {
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  final String icon;
-  final String title;
-  final String subtitle;
-  final bool gradient;
-  final VoidCallback onTap;
+// ── Top App Bar ────────────────────────────────────────────
+class _TopAppBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: _C.bg.withOpacity(0.85),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'Study Rooms',
+            style: TextStyle(
+              fontFamily: 'SpaceGrotesk',
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: _C.primary,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _C.primaryContainer.withOpacity(0.25),
+              border: Border.all(color: _C.primary.withOpacity(0.2), width: 1.5),
+            ),
+            child: const Icon(Icons.person_rounded,
+                color: _C.onSurfaceVar, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-  const _ActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.gradient,
-    required this.onTap,
-  });
+// ── Primary Action Button ──────────────────────────────────
+class _PrimaryActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _PrimaryActionButton(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        height: 52,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          gradient: gradient ? AppColors.primaryGradient : null,
-          color: gradient ? null : AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: gradient ? null : Border.all(color: AppColors.surfaceLight),
+          color: _C.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: _C.primaryContainer.withOpacity(0.4),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(icon, style: const TextStyle(fontSize: 32)),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
-                const SizedBox(height: 4),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.7))),
-              ],
+            Icon(icon, color: _C.onPrimaryContainer, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: _C.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
             ),
-            const Spacer(),
-            Icon(Icons.arrow_forward_ios,
-                color: Colors.white.withOpacity(0.7), size: 16),
           ],
         ),
       ),
@@ -410,29 +634,50 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-class _HintRow extends StatelessWidget {
-  final String icon;
-  final String text;
-  const _HintRow({required this.icon, required this.text});
+// ── Secondary Action Button ────────────────────────────────
+class _SecondaryActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _SecondaryActionButton(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(icon, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 10),
-        Text(text,
-            style: const TextStyle(
-                color: AppColors.textSecondary, fontSize: 13)),
-      ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _C.primaryContainer.withOpacity(0.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: _C.primary, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: _C.primary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
+// ── Rejoin Banner ──────────────────────────────────────────
 class _RejoinBanner extends StatelessWidget {
   final String roomName;
   final VoidCallback onTap;
-
   const _RejoinBanner({required this.roomName, required this.onTap});
 
   @override
@@ -442,34 +687,59 @@ class _RejoinBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.15),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [
+              _C.primaryContainer.withOpacity(0.25),
+              _C.surface.withOpacity(0.95),
+            ],
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.primary.withOpacity(0.4)),
+          border: Border.all(color: _C.primary.withOpacity(0.3)),
+          boxShadow: [
+            BoxShadow(
+              color: _C.primaryContainer.withOpacity(0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            const Text('🟢', style: TextStyle(fontSize: 20)),
+            Container(
+              width: 10, height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _C.tertiary,
+                boxShadow: [
+                  BoxShadow(color: _C.tertiary.withOpacity(0.5), blurRadius: 8),
+                ],
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Currently in a room',
-                      style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13)),
+                  const Text(
+                    'Currently in a room',
+                    style: TextStyle(
+                        color: _C.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        letterSpacing: 0.5),
+                  ),
                   const SizedBox(height: 2),
                   Text(roomName,
                       style: const TextStyle(
-                          color: AppColors.textPrimary,
+                          color: _C.onSurface,
                           fontSize: 15,
-                          fontWeight: FontWeight.bold)),
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'SpaceGrotesk')),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios,
-                color: AppColors.primary, size: 14),
+            const Icon(Icons.arrow_forward_ios, color: _C.primary, size: 14),
           ],
         ),
       ),
@@ -477,46 +747,344 @@ class _RejoinBanner extends StatelessWidget {
   }
 }
 
-class _PublicRoomCard extends StatelessWidget {
+// ── Room Card ──────────────────────────────────────────────
+class _RoomCard extends StatelessWidget {
   final StudyRoom room;
+  final bool isFirst;
+  final bool isMine;
   final VoidCallback onTap;
-
-  const _PublicRoomCard({required this.room, required this.onTap});
+  const _RoomCard({
+    required this.room,
+    required this.isFirst,
+    required this.isMine,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
+    final memberCount = room.members.length;
+
+    if (isMine) {
+      // ── Card nổi bật: đang ở trong phòng này ────────────
+      return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF3D2A8A), Color(0xFF2A1F5E)],
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.surfaceLight),
-        ),
-        child: Row(
-          children: [
-            const Text('🏠', style: TextStyle(fontSize: 24)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(room.name,
-                      style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('${room.members.length} member(s)',
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12)),
-                ],
-              ),
+          border: Border.all(color: const Color(0xFF6C3CE0), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6C3CE0).withOpacity(0.45),
+              blurRadius: 24,
+              offset: const Offset(0, 6),
             ),
-            const Icon(Icons.arrow_forward_ios,
-                color: AppColors.textMuted, size: 14),
           ],
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Badge "You're here"
+            Row(
+              children: [
+                Container(
+                  width: 8, height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF00DBE9),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x8000DBE9),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  "YOU'RE IN THIS ROOM",
+                  style: TextStyle(
+                    color: Color(0xFF00DBE9),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'ACTIVE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Room name + members
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        room.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'SpaceGrotesk',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$memberCount member${memberCount != 1 ? 's' : ''}',
+                        style: const TextStyle(
+                          color: Color(0xFFCEBDFF),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Rejoin button
+                GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'Rejoin',
+                      style: TextStyle(
+                        color: Color(0xFF3D2A8A),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Card thường ─────────────────────────────────────────
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1E2A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF494455)),
+      ),
+      child: Row(
+        children: [
+          // Left: icon
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF6C3CE0).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.meeting_room_rounded,
+              color: Color(0xFFCEBDFF),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          // Middle: room name + members
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room.name,
+                  style: const TextStyle(
+                    color: Color(0xFFE3E0F1),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$memberCount member${memberCount != 1 ? 's' : ''}',
+                  style: const TextStyle(
+                    color: Color(0xFF948EA1),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Right: Join button
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6C3CE0),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6C3CE0).withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Text(
+                'Join',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Empty State ────────────────────────────────────────────
+class _EmptyRoomsCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: _C.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _C.outlineVar.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56, height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _C.primaryContainer.withOpacity(0.15),
+              border: Border.all(color: _C.primary.withOpacity(0.15)),
+            ),
+            child: const Icon(Icons.meeting_room_outlined,
+                color: _C.primary, size: 26),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No active rooms',
+            style: TextStyle(
+              color: _C.onSurface,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'SpaceGrotesk',
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Create a room and invite others to join',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _C.outline, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Flow State Banner ──────────────────────────────────────
+class _FlowStateBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 120,
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _C.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _C.outlineVar.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: _C.primaryContainer.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Decorative glow
+          Positioned(
+            right: -20, bottom: -20,
+            child: Container(
+              width: 120, height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _C.primaryContainer.withOpacity(0.12),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Flow State Awaits',
+                style: TextStyle(
+                  fontFamily: 'SpaceGrotesk',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: _C.primary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Join a room to boost your productivity.',
+                style: TextStyle(color: _C.onSurfaceVar, fontSize: 13),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
