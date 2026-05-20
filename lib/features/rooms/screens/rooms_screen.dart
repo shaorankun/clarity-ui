@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/room_model.dart';
@@ -34,13 +35,28 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   bool _isPublic = false;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RoomProvider>().fetchPublicRooms();
+      final provider = context.read<RoomProvider>();
+
+      provider.fetchPublicRooms();
+
+      _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+        if (mounted) {
+          provider.refreshPublicRoomsSilently();
+        }
+      });
     });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   void _navigateToRoom(BuildContext context, String roomId) {

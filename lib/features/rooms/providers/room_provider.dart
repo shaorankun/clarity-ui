@@ -126,12 +126,21 @@ class RoomProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final res = await _dio.get('/api/rooms/public');
-      publicRooms = (res.data as List)
-          .map((e) => StudyRoom.fromJson(e))
-          .toList();
+      publicRooms = (res.data as List).map((e) => StudyRoom.fromJson(e)).toList();
     } catch (_) {}
     isLoadingPublic = false;
     notifyListeners();
+  }
+
+  Future<void> refreshPublicRoomsSilently() async {
+    try {
+      final res = await _dio.get('/api/rooms/public');
+      final newData = (res.data as List).map((e) => StudyRoom.fromJson(e)).toList();
+
+      publicRooms = newData;
+      notifyListeners();
+    } catch (_) {
+    }
   }
 
   Future<void> leaveRoom() async {
