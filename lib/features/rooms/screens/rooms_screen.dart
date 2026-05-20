@@ -274,8 +274,18 @@ class _RoomsScreenState extends State<RoomsScreen> {
     }
   }
 
+// Thay thế widget _showCreateRoom hiện tại bằng code này:
   void _showCreateRoom(BuildContext context) {
     final ctrl = TextEditingController();
+    String selectedTheme = 'spring'; // Khởi tạo theme mặc định
+
+    // Danh sách 4 mùa
+    final themes = [
+      {'id': 'spring', 'icon': '🌸', 'label': 'Spring'},
+      {'id': 'summer', 'icon': '☀️', 'label': 'Summer'},
+      {'id': 'autumn', 'icon': '🍁', 'label': 'Autumn'},
+      {'id': 'winter', 'icon': '❄️', 'label': 'Winter'},
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -316,7 +326,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     },
                     child: Container(
                       width: 32, height: 32,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: _C.surfaceVariant,
                       ),
@@ -351,7 +361,47 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+
+              // ─── UI CHỌN THEME ───
+              const SizedBox(height: 24),
+              const Text('Select Theme', style: TextStyle(color: _C.onSurfaceVar, fontSize: 14)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: themes.map((theme) {
+                  final isSelected = selectedTheme == theme['id'];
+                  return GestureDetector(
+                    onTap: () => setSheetState(() => selectedTheme = theme['id']!),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? _C.primaryContainer.withOpacity(0.2) : _C.surfaceContHigh,
+                        border: Border.all(
+                          color: isSelected ? _C.primary : Colors.transparent,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(theme['icon']!, style: const TextStyle(fontSize: 20)),
+                          const SizedBox(height: 4),
+                          Text(
+                            theme['label']!,
+                            style: TextStyle(
+                              color: isSelected ? _C.primary : _C.onSurfaceVar,
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              // ────────────────────
+
+              const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -383,13 +433,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     if (ctrl.text.trim().isEmpty) return;
                     final name = ctrl.text.trim();
                     final isPublicSnapshot = _isPublic;
+
                     await _abandonSoloIfRunning();
                     setState(() => _isPublic = false);
                     Navigator.pop(ctx);
-                    // Dùng _switchToRoom: leave phòng cũ (nếu có) trước khi create
+
+                    // Truyền selectedTheme vào hàm createRoom
                     await _switchToRoom(
                       context,
-                          () => room.createRoom(name, isPublic: isPublicSnapshot),
+                          () => room.createRoom(name, isPublic: isPublicSnapshot, selectedTheme: selectedTheme),
                     );
                   },
                   child: Container(
@@ -778,17 +830,25 @@ class _RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final memberCount = room.members.length;
+    final roomProvider = context.read<RoomProvider>();
+
+    // Lấy đường dẫn hình từ Provider
+    final String bgPath = roomProvider.getRoomBackground(room.id);
+
+    // Tạo cấu hình nền mờ
+    final DecorationImage bgImage = DecorationImage(
+      image: AssetImage(bgPath),
+      fit: BoxFit.cover,
+      opacity: 0.25, // Độ mờ vừa đủ để làm nền cho card
+    );
 
     if (isMine) {
       // ── Card nổi bật: đang ở trong phòng này ────────────
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF3D2A8A), Color(0xFF2A1F5E)],
-          ),
+          color: const Color(0xFF2A1F5E), // Background color fallback
+          image: bgImage, // Áp dụng hình nền
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFF6C3CE0), width: 1.5),
           boxShadow: [
@@ -919,6 +979,7 @@ class _RoomCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: const Color(0xFF1F1E2A),
+        image: bgImage, // Áp dụng hình nền cho thẻ public luôn
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF494455)),
       ),

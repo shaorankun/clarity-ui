@@ -61,9 +61,19 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
       });
     }
 
+    final String bgPath = room.getRoomBackground(widget.roomId);
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+        decoration: BoxDecoration(
+          gradient: AppColors.backgroundGradient,
+          // Đặt hình nền vào đây
+          image: DecorationImage(
+            image: AssetImage(bgPath),
+            fit: BoxFit.cover,
+            opacity: 0.15, // Cài đặt độ mờ thấp tránh gây chói
+          ),
+        ),
         child: SafeArea(
           child: room.isLoading
               ? const Center(
