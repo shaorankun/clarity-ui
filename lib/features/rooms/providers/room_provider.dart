@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../../../core/network/dio_client.dart';
@@ -32,9 +33,30 @@ class RoomProvider extends ChangeNotifier {
 
   final _dio = DioClient.instance;
 
+  final Map<String, String> localRoomBackgrounds = {};
+
+  String getRoomBackground(String roomId) {
+    // Nếu vừa tạo phòng và đã random hình, lấy ra dùng luôn
+    if (localRoomBackgrounds.containsKey(roomId)) {
+      return localRoomBackgrounds[roomId]!;
+    }
+    // Hardcode fallback cho các phòng người khác tạo: dùng Hash của roomId để cố định 1 hình
+    final themes = ['spring', 'summer', 'autumn', 'winter'];
+    final hash = roomId.hashCode.abs();
+    final theme = themes[hash % 4];
+    final index = (hash % 4) + 1; // Từ 1 đến 4
+
+    // Format tên file đúng với thư mục của bạn (ví dụ: summer1.png)
+    // LƯU Ý: Nếu đuôi file của bạn là .jpg thì sửa .png thành .jpg ở dưới nhé
+    final path = 'assets/pictures/$theme$index.jpg';
+
+    localRoomBackgrounds[roomId] = path;
+    return path;
+  }
+
   // ── REST API ─────────────────────────────────────────
 
-  Future<bool> createRoom(String name, {bool isPublic = false}) async {
+  Future<bool> createRoom(String name, {bool isPublic = false, String? selectedTheme}) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -43,12 +65,17 @@ class RoomProvider extends ChangeNotifier {
         'name': name,
         'isPublic': isPublic,
       });
-      print('=== createRoom data: name=$name, isPublic=$isPublic');
-      print('=== createRoom response: ${res.data}');
       final roomId = StudyRoom.fromJson(res.data).id;
+
+      // Nếu có chọn theme, random hình (1-4) và ghép chuỗi tên file không có dấu gạch dưới
+      if (selectedTheme != null) {
+        final randomImageIndex = math.Random().nextInt(4) + 1;
+        localRoomBackgrounds[roomId] = 'assets/pictures/$selectedTheme$randomImageIndex.jpg';
+      }
+
       await fetchRoom(roomId);
       await TokenStorage.saveRoomId(currentRoom!.id);
-      // BUG FIX: Refresh public room list sau khi tạo để Active Rooms cập nhật ngay
+
       if (isPublic) {
         await fetchPublicRooms();
       }
