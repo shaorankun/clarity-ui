@@ -165,23 +165,22 @@ class _StatsScreenState extends State<StatsScreen> {
                 valueColor: _C.primary,
               ),
               _MetricCard(
-                label: 'TOTAL FOCUS',
+                label: 'WEEKLY FOCUS',
                 icon: Icons.timer_outlined,
                 iconColor: _C.primary,
                 // FIX: dùng today từ weekly.last thay vì gọi /daily riêng
-                value: '${(today?.totalMinutes ?? 0) ~/ 60}',
+                value: '${stats.weeklyTotalMinutes ~/ 60}',
                 unit: 'h',
-                subUnit: (today?.totalMinutes ?? 0) % 60 > 0
-                    ? '${(today?.totalMinutes ?? 0) % 60}m'
+                subUnit: stats.weeklyTotalMinutes % 60 > 0
+                    ? '${stats.weeklyTotalMinutes % 60}m'
                     : null,
                 valueColor: _C.primary,
               ),
               _MetricCard(
-                label: 'TOTAL SESSIONS',
+                label: 'WEEKLY SESSIONS',
                 icon: Icons.layers_outlined,
                 iconColor: _C.tertiary,
-                // FIX: dùng today từ weekly.last thay vì gọi /daily riêng
-                value: '${today?.sessionCount ?? 0}',
+                value: '${stats.weeklyTotalSessions}',
                 unit: '',
                 valueColor: _C.tertiary,
               ),
