@@ -205,31 +205,35 @@ class _RoomsScreenState extends State<RoomsScreen> {
                         else if (room.publicRooms.isEmpty)
                           _EmptyRoomsCard()
                         else
-                          ...room.publicRooms.asMap().entries.map((entry) {
-                            final r = entry.value;
-                            final isActive = r.members.isNotEmpty;
-                            final isMine = room.currentRoom?.id == r.id;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _RoomCard(
-                                room: r,
-                                isFirst: isActive,
-                                isMine: isMine,
-                                onTap: () async {
-                                  if (isMine) {
-                                    _navigateToRoom(context, r.id);
-                                    return;
-                                  }
-                                  // Dùng _switchToRoom: leave phòng cũ trước,
-                                  // rồi join phòng mới — tránh race condition stack
-                                  await _switchToRoom(
-                                    context,
-                                        () => room.joinPublicRoom(r.id),
-                                  );
-                                },
-                              ),
-                            );
-                          }),
+                          ...(() {
+                            final myRoomId = room.currentRoom?.id;
+                            final sorted = [...room.publicRooms]..sort((a, b) {
+                              if (a.id == myRoomId) return -1;
+                              if (b.id == myRoomId) return 1;
+                              return 0;
+                            });
+                            return sorted.map((r) {
+                              final isMine = r.id == myRoomId;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _RoomCard(
+                                  room: r,
+                                  isFirst: r.members.isNotEmpty,
+                                  isMine: isMine,
+                                  onTap: () async {
+                                    if (isMine) {
+                                      _navigateToRoom(context, r.id);
+                                      return;
+                                    }
+                                    await _switchToRoom(
+                                      context,
+                                          () => room.joinPublicRoom(r.id),
+                                    );
+                                  },
+                                ),
+                              );
+                            });
+                          })(),
 
                         const SizedBox(height: 24),
 

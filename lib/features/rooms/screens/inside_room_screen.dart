@@ -294,7 +294,7 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
                 : null,
           ),
           child: Text(
-            'Start Focus',
+            isEnabled ? 'Start Focus' : 'Focusing Together',
             style: TextStyle(
               color: isEnabled ? Colors.white : AppColors.textMuted,
               fontSize: 16,
@@ -313,8 +313,7 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
     final members = room.currentRoom!.members;
     final ownerId = room.currentRoom!.ownerId;
     final session = room.roomSession;
-    final isActive = session?.status == 'FOCUSING' ||
-        session?.status == 'BREAK';
+    final sessionStatus = session?.status ?? 'IDLE';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -338,13 +337,28 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
           ),
           const SizedBox(height: 12),
           // Member list
-          ...members.map((m) => _buildMemberCard(m, isActive, m.userId == ownerId)),
+          ...members.map((m) => _buildMemberCard(m, sessionStatus, m.userId == ownerId)),
         ],
       ),
     );
   }
 
-  Widget _buildMemberCard(RoomMember member, bool isActive, bool isOwner) {
+  Widget _buildMemberCard(RoomMember member, String sessionStatus, bool isOwner) {
+    final isFocusing = sessionStatus == 'FOCUSING';
+    final isBreak    = sessionStatus == 'BREAK';
+    final isActive   = isFocusing || isBreak;
+
+    final statusColor = isFocusing
+        ? const Color(0xFF4CAF50)
+        : isBreak
+        ? const Color(0xFFFFB74D)
+        : AppColors.textMuted;
+
+    final statusLabel = isFocusing
+        ? 'Focusing'
+        : isBreak
+        ? 'On Break'
+        : 'Idle';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -405,18 +419,14 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
                     height: 7,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isActive
-                          ? const Color(0xFF4CAF50)
-                          : AppColors.textMuted,
+                      color: statusColor,
                     ),
                   ),
                   const SizedBox(width: 5),
                   Text(
-                    isActive ? 'Focusing' : 'Idle',
+                    statusLabel,
                     style: TextStyle(
-                      color: isActive
-                          ? const Color(0xFF4CAF50)
-                          : AppColors.textMuted,
+                      color: statusColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
