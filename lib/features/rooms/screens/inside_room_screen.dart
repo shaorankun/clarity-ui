@@ -5,7 +5,7 @@ import '../models/room_model.dart';
 import '../providers/room_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../features/auth/providers/auth_provider.dart';
-import '../../../shared/widgets/circular_timer.dart';
+import '../../timer/providers/timer_provider.dart';
 
 class InsideRoomScreen extends StatefulWidget {
   final String roomId;
@@ -23,13 +23,31 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
       final room = context.read<RoomProvider>();
       await room.fetchRoom(widget.roomId);
       await room.connectWebSocket(widget.roomId);
+
+      // Nếu vào room đang giữa session thì play nhạc luôn
+      final session = room.roomSession;
+      if (session?.status == 'FOCUSING' || session?.status == 'BREAK') {
+        context.read<TimerProvider>().playMusic();
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final room = context.watch<RoomProvider>();
-    final auth = context.watch<AuthProvider>();
+    final room  = context.watch<RoomProvider>();
+    final timer = context.read<TimerProvider>();
+    final auth  = context.watch<AuthProvider>();
+
+    // React to session status changes
+    final sessionStatus = room.roomSession?.status ?? 'IDLE';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (sessionStatus == 'FOCUSING' || sessionStatus == 'BREAK') {
+        timer.playMusic();
+      } else if (sessionStatus == 'IDLE') {
+        timer.stopMusic();
+      }
+    });
+
     final userId = auth.user?.id ?? '';
     final isOwner = room.isOwner(userId);
     final session = room.roomSession;
@@ -58,6 +76,8 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
             children: [
               _buildHeader(context, room),
               const Spacer(),
+              _RoomMusicBar(timer: context.read<TimerProvider>()),
+              const SizedBox(height: 16),
               _buildTimer(room, session),
               const SizedBox(height: 32),
               SizedBox(
@@ -642,6 +662,72 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
                 style: TextStyle(color: AppColors.danger)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RoomMusicBar extends StatelessWidget {
+  final TimerProvider timer;
+  const _RoomMusicBar({required this.timer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<TimerProvider>(
+      builder: (_, t, __) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B1A26),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF494455).withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () => t.toggleMusic(),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  t.isMusicEnabled ? Icons.music_note_rounded : Icons.music_off_rounded,
+                  key: ValueKey(t.isMusicEnabled),
+                  color: t.isMusicEnabled ? AppColors.primary : AppColors.textMuted.withOpacity(0.4),
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Lofi music',
+                style: TextStyle(
+                  color: t.isMusicEnabled ? AppColors.textPrimary : AppColors.textMuted.withOpacity(0.4),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 80,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: SliderComponentShape.noOverlay,
+                  activeTrackColor: AppColors.primary,
+                  inactiveTrackColor: const Color(0xFF494455).withOpacity(0.4),
+                  thumbColor: AppColors.primary,
+                ),
+                child: Slider(
+                  value: t.musicVolume,
+                  min: 0,
+                  max: 1,
+                  onChanged: (v) => t.setVolume(v),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

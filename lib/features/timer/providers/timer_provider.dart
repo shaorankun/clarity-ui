@@ -81,8 +81,8 @@ class TimerProvider extends ChangeNotifier {
 
   Future<void> toggleMusic() async {
     isMusicEnabled = !isMusicEnabled;
-    if (isMusicEnabled && status == TimerStatus.running && mode == TimerMode.focus) {
-      await _player.play();
+    if (isMusicEnabled && _player.processingState != ProcessingState.idle) {
+      unawaited(_player.play());
     } else {
       await _player.pause();
     }
@@ -103,6 +103,14 @@ class TimerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void playMusic() {
+    if (isMusicEnabled) unawaited(_player.play());
+  }
+
+  Future<void> stopMusic() async {
+    await _player.pause();
+    await _player.seek(Duration.zero);
+  }
   // ── Getters ──────────────────────────────────────────────────────────────────
 
   int get total => _durations[mode]!;
