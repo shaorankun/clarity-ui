@@ -33,7 +33,6 @@ class TimerScreen extends StatelessWidget {
   }
 
   void _showTaskPicker(BuildContext context, TimerProvider timer) {
-    // Gọi API lấy tasks mới nhất ngay khi mở sheet
     context.read<TaskProvider>().fetchTasks();
     showModalBottomSheet(
       context: context,
@@ -66,7 +65,7 @@ class TimerScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
 
-                    // ── Mode chips — căn giữa đều ────────────────────────────
+                    // ── Mode chips ───────────────────────────────────────────
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
@@ -111,7 +110,15 @@ class TimerScreen extends StatelessWidget {
                         }).toList(),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
+
+                    // ── Music bar (chỉ hiện khi focus mode) ─────────────────
+                    if (isFocus)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _MusicBar(timer: timer),
+                      ),
+                    const SizedBox(height: 8),
 
                     // ── Timer circle ─────────────────────────────────────────
                     Stack(
@@ -135,9 +142,6 @@ class TimerScreen extends StatelessWidget {
                     const SizedBox(height: 28),
 
                     // ── CTA buttons ──────────────────────────────────────────
-                    // Focus mode idle: Select Task & Start (bắt chọn task)
-                    // Break mode idle: Start button trực tiếp
-                    // Running / paused: Pause + Abandon (cho tất cả mode)
                     if (timer.status == TimerStatus.idle) ...[
                       if (isFocus)
                         _SelectTaskStartButton(
@@ -147,12 +151,14 @@ class TimerScreen extends StatelessWidget {
                         )
                       else
                         _BreakStartButton(
-                          onTap: () => timer.start(inRoom: false),
+                          onTap: inRoom ? null : () => timer.start(inRoom: false),
                         ),
-                      if (inRoom && isFocus) ...[
+                      if (inRoom) ...[
                         const SizedBox(height: 10),
                         Text(
-                          'Leave your study room to start a solo session',
+                          isFocus
+                              ? 'Leave your study room to start a solo session'
+                              : 'Leave your study room to start a solo break',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: _kOnSurfaceVar.withOpacity(0.6), fontSize: 12),
                         ),
@@ -184,6 +190,155 @@ class TimerScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Music Bar ────────────────────────────────────────────────────────────────
+class _MusicBar extends StatelessWidget {
+  final TimerProvider timer;
+  const _MusicBar({required this.timer});
+
+  void _showTrackPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _kSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _TrackPickerSheet(timer: timer),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _kSurfaceContLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kOutlineVar.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          // Toggle on/off
+          GestureDetector(
+            onTap: () => timer.toggleMusic(),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                timer.isMusicEnabled ? Icons.music_note_rounded : Icons.music_off_rounded,
+                key: ValueKey(timer.isMusicEnabled),
+                color: timer.isMusicEnabled ? _kPrimary : _kOnSurfaceVar.withOpacity(0.4),
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Track name — tap để đổi track
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showTrackPicker(context),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      timer.currentTrackTitle,
+                      style: TextStyle(
+                        color: timer.isMusicEnabled ? _kOnSurface : _kOnSurfaceVar.withOpacity(0.4),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(Icons.expand_more_rounded,
+                      color: _kOnSurfaceVar.withOpacity(0.4), size: 18),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Volume slider
+          SizedBox(
+            width: 80,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: SliderComponentShape.noOverlay,
+                activeTrackColor: _kPrimary,
+                inactiveTrackColor: _kOutlineVar.withOpacity(0.4),
+                thumbColor: _kPrimary,
+              ),
+              child: Slider(
+                value: timer.musicVolume,
+                min: 0,
+                max: 1,
+                onChanged: (v) => timer.setVolume(v),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Track Picker Sheet ───────────────────────────────────────────────────────
+class _TrackPickerSheet extends StatelessWidget {
+  final TimerProvider timer;
+  const _TrackPickerSheet({required this.timer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                  color: _kOutlineVar.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const Text('Choose track',
+              style: TextStyle(color: _kOnSurface, fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          ...TimerProvider.tracks.asMap().entries.map((e) {
+            final selected = timer.currentTrackIndex == e.key;
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.music_note_rounded,
+                color: selected ? _kPrimary : _kOnSurfaceVar.withOpacity(0.5),
+                size: 20,
+              ),
+              title: Text(
+                e.value['title']!,
+                style: TextStyle(
+                  color: selected ? _kPrimary : _kOnSurface,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+              trailing: selected
+                  ? const Icon(Icons.check_rounded, color: _kPrimary, size: 18)
+                  : null,
+              onTap: () {
+                timer.setTrack(e.key);
+                Navigator.pop(context);
+              },
+            );
+          }),
+        ],
       ),
     );
   }
@@ -305,7 +460,7 @@ class _ArcPainter extends CustomPainter {
   bool shouldRepaint(_ArcPainter old) => old.progress != progress;
 }
 
-// ─── Select Task & Start button (Focus mode) ──────────────────────────────────
+// ─── Select Task & Start button ───────────────────────────────────────────────
 class _SelectTaskStartButton extends StatelessWidget {
   final TimerProvider timer;
   final bool inRoom;
@@ -340,9 +495,9 @@ class _SelectTaskStartButton extends StatelessWidget {
   }
 }
 
-// ─── Start button (Break mode) ────────────────────────────────────────────────
+// ─── Break Start button ───────────────────────────────────────────────────────
 class _BreakStartButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _BreakStartButton({required this.onTap});
 
   @override
@@ -352,13 +507,12 @@ class _BreakStartButton extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: onTap,
         icon: const Icon(Icons.play_arrow_rounded, size: 22),
-        label: const Text(
-          'Start Break',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
+        label: const Text('Start Break', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
         style: ElevatedButton.styleFrom(
           backgroundColor: _kPrimaryContainer,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: _kSurface,
+          disabledForegroundColor: _kOnSurfaceVar.withOpacity(0.4),
           shape: const StadiumBorder(),
           elevation: 0,
           shadowColor: Colors.transparent,
@@ -375,7 +529,7 @@ class _StatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalSecs  = timer.focusedSeconds;
+    final totalSecs = timer.focusedSeconds;
     final focusedLabel = totalSecs >= 3600
         ? '${totalSecs ~/ 3600}h ${(totalSecs % 3600) ~/ 60}m'
         : totalSecs >= 60
@@ -383,9 +537,9 @@ class _StatsRow extends StatelessWidget {
         : '0m';
     return Row(
       children: [
-        _StatCard(icon: Icons.schedule_outlined, iconColor: _kPrimary, value: timer.sessions > 0 ? focusedLabel : '0m', label: 'FOCUSED'),
+        _StatCard(icon: Icons.schedule_outlined, iconColor: _kPrimary,    value: timer.sessions > 0 ? focusedLabel : '0m', label: 'FOCUSED'),
         const SizedBox(width: 8),
-        _StatCard(icon: Icons.bolt, iconColor: _kTertiary, value: '${timer.sessions}', label: 'SESSIONS'),
+        _StatCard(icon: Icons.bolt,              iconColor: _kTertiary,   value: '${timer.sessions}',                      label: 'SESSIONS'),
         const SizedBox(width: 8),
         Consumer<TaskProvider>(
           builder: (_, tasks, __) => _StatCard(icon: Icons.task_alt, iconColor: _kSecondary, value: '${tasks.completed.length}/${tasks.all.length}', label: 'TASKS'),
@@ -440,7 +594,6 @@ class _TodaysTasksSection extends StatelessWidget {
         final activeTitle = timer.selectedTaskTitle;
         final isRunning   = timer.status != TimerStatus.idle;
         final isBreak     = timer.mode == TimerMode.shortBreak || timer.mode == TimerMode.longBreak;
-        // Free focus session: focus mode đang chạy/paused nhưng không có task được chọn
         final isFreeFocus = isRunning && !isBreak && activeTitle == null;
 
         return Column(
@@ -452,21 +605,16 @@ class _TodaysTasksSection extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Đang trong break
             if (isRunning && isBreak) ...[
               _BreakCard(isShort: timer.mode == TimerMode.shortBreak),
               const SizedBox(height: 8),
-            ]
-            // Đang free focus session
-            else if (isFreeFocus) ...[
+            ] else if (isFreeFocus) ...[
               const _FreeFocusCard(),
               const SizedBox(height: 8),
-            ]
-            // Đang có task cụ thể được chọn
-            else if (activeTitle != null) ...[
-                _ActiveTaskCard(title: activeTitle),
-                const SizedBox(height: 8),
-              ],
+            ] else if (activeTitle != null) ...[
+              _ActiveTaskCard(title: activeTitle),
+              const SizedBox(height: 8),
+            ],
 
             if (tasks.isLoading)
               const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: _kPrimary)))
@@ -508,10 +656,10 @@ class _BreakCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const breakColor = Color(0xFF4DD0E1); // cyan nhạt cho break
-    final label = isShort ? 'Short Break' : 'Long Break';
+    const breakColor = Color(0xFF4DD0E1);
+    final label    = isShort ? 'Short Break' : 'Long Break';
     final subtitle = isShort ? 'Take a quick 5-minute rest' : 'Relax — you earned a long break';
-    final icon = isShort ? Icons.coffee_outlined : Icons.weekend_outlined;
+    final icon     = isShort ? Icons.coffee_outlined : Icons.weekend_outlined;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -524,11 +672,7 @@ class _BreakCard extends StatelessWidget {
         children: [
           Container(
             width: 24, height: 24,
-            decoration: BoxDecoration(
-              color: breakColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: breakColor.withOpacity(0.6)),
-            ),
+            decoration: BoxDecoration(color: breakColor.withOpacity(0.2), borderRadius: BorderRadius.circular(6), border: Border.all(color: breakColor.withOpacity(0.6))),
             child: Icon(icon, color: breakColor, size: 14),
           ),
           const SizedBox(width: 14),
@@ -553,7 +697,7 @@ class _BreakCard extends StatelessWidget {
   }
 }
 
-// ─── Free Focus Session Card ──────────────────────────────────────────────────
+// ─── Free Focus Card ──────────────────────────────────────────────────────────
 class _FreeFocusCard extends StatelessWidget {
   const _FreeFocusCard();
 
@@ -570,11 +714,7 @@ class _FreeFocusCard extends StatelessWidget {
         children: [
           Container(
             width: 24, height: 24,
-            decoration: BoxDecoration(
-              color: _kPrimaryContainer.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _kPrimary.withOpacity(0.6)),
-            ),
+            decoration: BoxDecoration(color: _kPrimaryContainer.withOpacity(0.4), borderRadius: BorderRadius.circular(6), border: Border.all(color: _kPrimary.withOpacity(0.6))),
             child: const Icon(Icons.self_improvement, color: _kPrimary, size: 14),
           ),
           const SizedBox(width: 14),
@@ -617,11 +757,7 @@ class _ActiveTaskCard extends StatelessWidget {
         children: [
           Container(
             width: 24, height: 24,
-            decoration: BoxDecoration(
-              color: _kPrimaryContainer.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _kPrimary.withOpacity(0.6)),
-            ),
+            decoration: BoxDecoration(color: _kPrimaryContainer.withOpacity(0.4), borderRadius: BorderRadius.circular(6), border: Border.all(color: _kPrimary.withOpacity(0.6))),
             child: const Icon(Icons.timer_outlined, color: _kPrimary, size: 14),
           ),
           const SizedBox(width: 14),

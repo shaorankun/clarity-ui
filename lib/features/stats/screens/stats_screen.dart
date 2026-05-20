@@ -3,7 +3,40 @@ import 'package:provider/provider.dart';
 import '../providers/stats_provider.dart';
 import '../models/stats_model.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../tasks/providers/task_provider.dart';
 
+// ── Design tokens (mirrors Stitch / app_colors) ──────────────────────────────
+class _C {
+  static const bg           = Color(0xFF12121D);
+  static const surface      = Color(0xFF1F1E2A);
+  static const surfaceHigh  = Color(0xFF292935);
+  static const surfaceHighest = Color(0xFF343440);
+  static const outline      = Color(0xFF948EA1);
+  static const outlineVar   = Color(0xFF494455);
+
+  // Primary (purple)
+  static const primary      = Color(0xFFCEBDFF);
+  static const primaryCont  = Color(0xFF6C3CE0);
+
+  // Secondary (lavender)
+  static const secondary    = Color(0xFFD2BBFF);
+
+  // Tertiary (cyan)
+  static const tertiary     = Color(0xFF00DBE9);
+
+  static const onSurface    = Color(0xFFE3E0F1);
+  static const onSurfaceVar = Color(0xFFCBC3D7);
+
+  // Gradient helpers
+  static LinearGradient get glassCard => const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xB31F1E2A), Color(0xCC0D0D18)],
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
 
@@ -25,268 +58,704 @@ class _StatsScreenState extends State<StatsScreen> {
     final stats = context.watch<StatsProvider>();
 
     return Container(
-      decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0F0F1A), Color(0xFF12121D)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
       child: SafeArea(
-        child: stats.isLoading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-            : stats.overview == null
-            ? const Center(child: Text('No data yet',
-            style: TextStyle(color: AppColors.textSecondary)))
-            : _buildContent(context, stats),
+        child: Column(
+          children: [
+            // ── Top App Bar ────────────────────────────────────────────────
+            _TopAppBar(),
+            // ── Content ───────────────────────────────────────────────────
+            Expanded(
+              child: stats.isLoading
+                  ? const Center(
+                child: CircularProgressIndicator(
+                  color: _C.primary,
+                  strokeWidth: 2,
+                ),
+              )
+                  : stats.overview == null
+                  ? const Center(
+                child: Text(
+                  'No data yet',
+                  style: TextStyle(color: _C.outline),
+                ),
+              )
+                  : _buildContent(context, stats),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildContent(BuildContext context, StatsProvider stats) {
     final o = stats.overview!;
+    // today = phần tử cuối của weekly (backend luôn trả 7 ngày, last = hôm nay UTC)
+    final today = o.weekly.isNotEmpty ? o.weekly.last : null;
+
+    // Date range label: lấy từ date field của weekly thay vì DateTime.now()
+    // FIX: không dùng DateTime.now() để tránh lệch timezone thiết bị vs server
+    String dateLabel = '';
+    if (o.weekly.isNotEmpty) {
+      final firstDate = DateTime.tryParse(o.weekly.first.date);
+      final lastDate  = DateTime.tryParse(o.weekly.last.date);
+      final months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      if (firstDate != null && lastDate != null) {
+        dateLabel =
+        '${months[firstDate.month - 1]} ${firstDate.day} — ${months[lastDate.month - 1]} ${lastDate.day}, ${lastDate.year}';
+      }
+    }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          const Text('Your Progress',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary)),
+          // ── Section Header ───────────────────────────────────────────────
+          const Text(
+            'Stats',
+            style: TextStyle(
+              fontFamily: 'SpaceGrotesk',
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              color: _C.onSurface,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            dateLabel,
+            style: const TextStyle(
+              fontSize: 13,
+              color: _C.outline,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
           const SizedBox(height: 24),
 
-          // Streak cards
-          Row(
+          // ── 2×2 Metric Cards ─────────────────────────────────────────────
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.35,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             children: [
-              Expanded(child: _statCard(
-                icon: '🔥',
-                label: 'Current Streak',
-                value: '${o.currentStreak} days',
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: _statCard(
-                icon: '🏆',
-                label: 'Longest Streak',
-                value: '${o.longestStreak} days',
-              )),
+              _MetricCard(
+                label: 'CURRENT STREAK',
+                icon: Icons.local_fire_department_outlined,
+                iconColor: _C.secondary,
+                value: '${o.currentStreak}',
+                unit: 'days',
+                valueColor: _C.secondary,
+              ),
+              _MetricCard(
+                label: 'LONGEST STREAK',
+                icon: Icons.workspace_premium_outlined,
+                iconColor: _C.primary,
+                value: '${o.longestStreak}',
+                unit: 'days',
+                valueColor: _C.primary,
+              ),
+              _MetricCard(
+                label: 'WEEKLY FOCUS',
+                icon: Icons.timer_outlined,
+                iconColor: _C.primary,
+                // FIX: dùng today từ weekly.last thay vì gọi /daily riêng
+                value: '${stats.weeklyTotalMinutes ~/ 60}',
+                unit: 'h',
+                subUnit: stats.weeklyTotalMinutes % 60 > 0
+                    ? '${stats.weeklyTotalMinutes % 60}m'
+                    : null,
+                valueColor: _C.primary,
+              ),
+              _MetricCard(
+                label: 'WEEKLY SESSIONS',
+                icon: Icons.layers_outlined,
+                iconColor: _C.tertiary,
+                value: '${stats.weeklyTotalSessions}',
+                unit: '',
+                valueColor: _C.tertiary,
+              ),
             ],
+          ),
+          const SizedBox(height: 28),
+
+          // ── Today ────────────────────────────────────────────────────────
+          const Text(
+            'Today',
+            style: TextStyle(
+              fontFamily: 'SpaceGrotesk',
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              color: _C.onSurface,
+            ),
           ),
           const SizedBox(height: 12),
+          _TodayCard(today: today, stats: stats),
+          const SizedBox(height: 24),
 
-          // Total cards
-          Row(
-            children: [
-              Expanded(child: _statCard(
-                icon: '⏱️',
-                label: 'Total Focus',
-                value: stats.formatMinutes(o.totalMinutes),
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: _statCard(
-                icon: '✅',
-                label: 'Total Sessions',
-                value: '${o.totalSessions}',
-              )),
-            ],
+          // ── Daily Focus Time Bar Chart ───────────────────────────────────
+          _GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Daily Focus Time',
+                      style: TextStyle(
+                        fontFamily: 'SpaceGrotesk',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: _C.onSurface,
+                      ),
+                    ),
+                    const Icon(Icons.more_horiz, color: _C.outline, size: 20),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                o.weekly.isEmpty
+                    ? const SizedBox(
+                  height: 120,
+                  child: Center(
+                    child: Text(
+                      'No data this week',
+                      style: TextStyle(color: _C.outline, fontSize: 13),
+                    ),
+                  ),
+                )
+                    : _WeeklyBarChart(weekly: o.weekly, stats: stats),
+              ],
+            ),
           ),
-
-          const SizedBox(height: 28),
-
-          // Weekly chart
-          const Text('This Week',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary)),
           const SizedBox(height: 16),
 
-          o.weekly.isEmpty
-              ? _emptyChart()
-              : _WeeklyChart(weekly: o.weekly),
-
-          const SizedBox(height: 28),
-
-          // Today summary
-          if (o.weekly.isNotEmpty) ...[
-            const Text('Today',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 12),
-            _todaySummary(o.weekly.last, stats),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _statCard({
-    required String icon,
-    required String label,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.surfaceLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 24)),
+          // ── Personal Best ────────────────────────────────────────────────
+          _PersonalBestCard(weekly: o.weekly, stats: stats),
           const SizedBox(height: 8),
-          Text(value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary)),
-          const SizedBox(height: 4),
-          Text(label,
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         ],
       ),
     );
   }
-
-  Widget _emptyChart() {
-    return Container(
-      height: 140,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Text('No data this week',
-          style: TextStyle(color: AppColors.textMuted)),
-    );
-  }
-
-  Widget _todaySummary(DailyStats today, StatsProvider stats) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.surfaceLight),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _summaryItem('⏱️', stats.formatMinutes(today.totalMinutes), 'focused'),
-          _divider(),
-          _summaryItem('🍅', '${today.sessionCount}', 'sessions'),
-          _divider(),
-          _summaryItem('✅', '${today.tasksCompleted}', 'tasks done'),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryItem(String icon, String value, String label) {
-    return Column(
-      children: [
-        Text(icon, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 4),
-        Text(value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary)),
-        Text(label,
-            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-      ],
-    );
-  }
-
-  Widget _divider() => Container(
-      width: 1, height: 40, color: AppColors.surfaceLight);
 }
 
-// ── Weekly Bar Chart ──────────────────────────────────────
-class _WeeklyChart extends StatelessWidget {
-  final List<DailyStats> weekly;
-  const _WeeklyChart({required this.weekly});
+// ── Top App Bar ───────────────────────────────────────────────────────────────
+class _TopAppBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final user = auth.user;
+    final initial = (user?.displayName.isNotEmpty == true)
+        ? user!.displayName[0].toUpperCase()
+        : '?';
+
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: const Color(0xFF12121D).withOpacity(0.8),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6C3CE0).withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            GestureDetector(
+              onTap: () {},
+              child: const Icon(Icons.menu, color: _C.primary, size: 24),
+            ),
+            const Text(
+              'Clarity',
+              style: TextStyle(
+                fontFamily: 'SpaceGrotesk',
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: _C.primary,
+                letterSpacing: -0.3,
+              ),
+            ),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF6C3CE0).withOpacity(0.35),
+                border: Border.all(
+                  color: _C.primary.withOpacity(0.2),
+                  width: 1.5,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontFamily: 'SpaceGrotesk',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _C.primary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Glass Card container ──────────────────────────────────────────────────────
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  const _GlassCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(20),
+  });
 
   @override
   Widget build(BuildContext context) {
-    final maxMinutes = weekly
-        .map((d) => d.totalMinutes)
-        .fold(0, (a, b) => a > b ? a : b);
-
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+      width: double.infinity,
+      padding: padding,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.surfaceLight),
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(weekly.length, (i) {
-                final d = weekly[i];
-                final ratio = maxMinutes == 0
-                    ? 0.0 : d.totalMinutes / maxMinutes;
-                final isToday = i == weekly.length - 1;
-
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        // Minute label on top of bar
-                        if (d.totalMinutes > 0)
-                          Text('${d.totalMinutes}m',
-                              style: const TextStyle(
-                                  fontSize: 9, color: AppColors.textMuted)),
-                        const SizedBox(height: 4),
-                        // Bar
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 600),
-                          curve: Curves.easeOut,
-                          height: ratio == 0 ? 4 : 100 * ratio,
-                          decoration: BoxDecoration(
-                            gradient: isToday
-                                ? AppColors.primaryGradient
-                                : LinearGradient(colors: [
-                              AppColors.primary.withOpacity(0.5),
-                              AppColors.primaryLight.withOpacity(0.5),
-                            ],
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-          const Divider(color: AppColors.surfaceLight, height: 1),
-          const SizedBox(height: 8),
-
-          // Day labels
-          Row(
-            children: List.generate(weekly.length, (i) {
-              final isToday = i == weekly.length - 1;
-              // Map index to day label based on today
-              final dayIndex = (DateTime.now().weekday - 1 - (weekly.length - 1 - i)) % 7;
-              final label = days[dayIndex < 0 ? dayIndex + 7 : dayIndex];
-              return Expanded(
-                child: Text(label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isToday ? AppColors.primary : AppColors.textMuted,
-                      fontWeight: isToday ? FontWeight.w600 : FontWeight.normal,
-                    )),
-              );
-            }),
+        gradient: _C.glassCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6C3CE0).withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
+      child: child,
+    );
+  }
+}
+
+// ── Metric Card ───────────────────────────────────────────────────────────────
+class _MetricCard extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color iconColor;
+  final String value;
+  final String unit;
+  final String? subUnit;
+  final Color valueColor;
+
+  const _MetricCard({
+    required this.label,
+    required this.icon,
+    required this.iconColor,
+    required this.value,
+    required this.unit,
+    this.subUnit,
+    required this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: _C.glassCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _C.outline,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              Icon(icon, color: iconColor.withOpacity(0.9), size: 20),
+            ],
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontFamily: 'SpaceGrotesk',
+                  fontSize: 40,
+                  fontWeight: FontWeight.w700,
+                  color: valueColor,
+                  height: 1.0,
+                  letterSpacing: -1,
+                ),
+              ),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    unit,
+                    style: const TextStyle(fontSize: 14, color: _C.outline),
+                  ),
+                ),
+              ],
+              if (subUnit != null && subUnit!.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    subUnit!,
+                    style: TextStyle(
+                      fontFamily: 'SpaceGrotesk',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: valueColor.withOpacity(0.75),
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Today Card ────────────────────────────────────────────────────────────────
+class _TodayCard extends StatelessWidget {
+  final DailyStats? today;
+  final StatsProvider stats;
+
+  const _TodayCard({required this.today, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final focusLabel = today != null ? stats.formatMinutes(today!.totalMinutes) : '0m';
+    final sessions   = today?.sessionCount ?? 0;
+    // Đọc trực tiếp từ TaskProvider để phản ánh ngay khi user toggle task
+    final tasks      = context.watch<TaskProvider>().completed.length;
+
+    return _GlassCard(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      child: IntrinsicHeight(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _TodayItem(label: 'FOCUS TIME', value: focusLabel, valueColor: _C.primary),
+            VerticalDivider(color: _C.outlineVar.withOpacity(0.3), thickness: 1, width: 1),
+            _TodayItem(label: 'SESSIONS', value: '$sessions', valueColor: _C.secondary),
+            VerticalDivider(color: _C.outlineVar.withOpacity(0.3), thickness: 1, width: 1),
+            _TodayItem(label: 'TASKS DONE', value: '$tasks', valueColor: _C.tertiary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  const _TodayItem({
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: _C.outline,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'SpaceGrotesk',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Weekly Bar Chart ──────────────────────────────────────────────────────────
+class _WeeklyBarChart extends StatefulWidget {
+  final List<DailyStats> weekly;
+  final StatsProvider stats;
+
+  const _WeeklyBarChart({required this.weekly, required this.stats});
+
+  @override
+  State<_WeeklyBarChart> createState() => _WeeklyBarChartState();
+}
+
+class _WeeklyBarChartState extends State<_WeeklyBarChart> {
+  int _selectedIndex = -1;
+
+  // FIX: helper lấy label ngày từ date string của API, không dùng DateTime.now()
+  String _dayLabel(String dateStr) {
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final parsed = DateTime.tryParse(dateStr);
+    if (parsed == null) return '?';
+    return labels[parsed.weekday - 1]; // weekday: 1=Mon ... 7=Sun
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final weekly     = widget.weekly;
+    final maxMinutes = weekly.map((d) => d.totalMinutes).fold(0, (a, b) => a > b ? a : b);
+    const barHeight  = 100.0;
+    const minBar     = 6.0;
+
+    return SizedBox(
+      height: barHeight + 50,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: List.generate(weekly.length, (i) {
+          final d          = weekly[i];
+          final ratio      = maxMinutes == 0 ? 0.0 : d.totalMinutes / maxMinutes;
+          final isToday    = i == weekly.length - 1;
+          final isSelected = _selectedIndex == i;
+          final barH       = ratio == 0 ? minBar : (barHeight * ratio).clamp(minBar, barHeight);
+
+          // FIX: label lấy từ date field của API thay vì tính từ DateTime.now()
+          final label = _dayLabel(d.date);
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedIndex = (_selectedIndex == i) ? -1 : i;
+                });
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Tooltip thời gian trên đầu cột
+                  Opacity(
+                    opacity: isSelected ? 1.0 : 0.0,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        widget.stats.formatMinutes(d.totalMinutes),
+                        style: const TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _C.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Cột biểu đồ
+                  AnimatedContainer(
+                    duration: Duration(milliseconds: 400 + i * 60),
+                    curve: Curves.easeOut,
+                    height: barH,
+                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      gradient: isToday || isSelected
+                          ? LinearGradient(
+                        colors: isSelected && !isToday
+                            ? [
+                          const Color(0xFFCEBDFF).withOpacity(0.7),
+                          const Color(0xFFB89CFF).withOpacity(0.5),
+                        ]
+                            : const [Color(0xFFCEBDFF), Color(0xFFB89CFF)],
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                      )
+                          : LinearGradient(
+                        colors: [
+                          const Color(0xFF6C3CE0).withOpacity(0.25),
+                          const Color(0xFF6C3CE0).withOpacity(0.15),
+                        ],
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                      ),
+                      boxShadow: isToday || isSelected
+                          ? [
+                        BoxShadow(
+                          color: const Color(0xFF6C3CE0)
+                              .withOpacity(isSelected ? 0.55 : 0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Nhãn thứ
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: (isToday || isSelected) ? FontWeight.w700 : FontWeight.w400,
+                      color: (isToday || isSelected) ? _C.primary : _C.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+// ── Personal Best Card ────────────────────────────────────────────────────────
+class _PersonalBestCard extends StatelessWidget {
+  final List<DailyStats> weekly;
+  final StatsProvider stats;
+
+  const _PersonalBestCard({required this.weekly, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    int bestIdx = 0;
+    for (var i = 1; i < weekly.length; i++) {
+      if (weekly[i].totalMinutes > weekly[bestIdx].totalMinutes) bestIdx = i;
+    }
+    final bestDay = weekly.isNotEmpty ? weekly[bestIdx] : null;
+
+    // FIX: lấy tên ngày từ date field của API, không tính từ DateTime.now()
+    String dayName = '—';
+    if (bestDay != null) {
+      final parsed = DateTime.tryParse(bestDay.date);
+      if (parsed != null) {
+        dayName = dayNames[parsed.weekday - 1];
+      }
+    }
+
+    final timeLabel = bestDay != null ? stats.formatMinutes(bestDay.totalMinutes) : '—';
+
+    return Stack(
+      children: [
+        _GlassCard(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'PERSONAL BEST',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _C.primary,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Peak Performance',
+                      style: TextStyle(
+                        fontFamily: 'SpaceGrotesk',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: _C.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Your best day was $dayName\nwith $timeLabel of deep focus.',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: _C.onSurfaceVar,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _C.primary.withOpacity(0.35), width: 2),
+                  color: _C.primaryCont.withOpacity(0.12),
+                ),
+                child: const Icon(Icons.auto_awesome, color: _C.primary, size: 28),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          right: -20,
+          bottom: -20,
+          child: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _C.primaryCont.withOpacity(0.1),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

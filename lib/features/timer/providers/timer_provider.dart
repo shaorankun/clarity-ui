@@ -1,29 +1,31 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/notification_service.dart';
 import '../../../core/storage/token_storage.dart';
+import 'package:flutter/foundation.dart';
 
 enum TimerMode { focus, shortBreak, longBreak }
 enum TimerStatus { idle, running, paused }
 
 class TimerProvider extends ChangeNotifier {
   static const Map<TimerMode, int> _durations = {
-    TimerMode.focus:      1 * 60,
+    TimerMode.focus:      25 * 60,
     TimerMode.shortBreak: 5  * 60,
     TimerMode.longBreak:  15 * 60,
   };
 
   // Storage keys
-  static const _kSessions      = 'timer_sessions';
-  static const _kFocusedSecs   = 'timer_focused_seconds';
-  static const _kSavedDate     = 'timer_saved_date';
+  static const _kSessions    = 'timer_sessions';
+  static const _kFocusedSecs = 'timer_focused_seconds';
+  static const _kSavedDate   = 'timer_saved_date';
 
   TimerMode   mode      = TimerMode.focus;
   TimerStatus status    = TimerStatus.idle;
-  int         remaining = 1 * 60;
+  int         remaining = 25 * 60;
   int         sessions  = 0;
-  int         focusedSeconds = 0; // tổng giây đã focus hôm nay
+  int         focusedSeconds = 0;
 
   String? selectedTaskId;
   String? selectedTaskTitle;
@@ -31,6 +33,85 @@ class TimerProvider extends ChangeNotifier {
 
   Timer? _ticker;
   final _dio = DioClient.instance;
+
+  // ── Music ────────────────────────────────────────────────────────────────────
+
+  static const List<Map<String, String>> tracks = [
+    {'title': 'Lofi 1', 'asset': 'assets/audio/lofi_1.mp3'},
+    // {'title': 'Lofi 2', 'asset': 'assets/audio/lofi_2.ogg'},
+    // {'title': 'Lofi 3', 'asset': 'assets/audio/lofi_3.ogg'},
+  ];
+
+  final AudioPlayer _player = AudioPlayer();
+  bool   isMusicEnabled = true;
+  int    currentTrackIndex = 0;
+  double musicVolume = 0.6;
+
+  String get currentTrackTitle => tracks[currentTrackIndex]['title']!;
+
+  Future<void> _initPlayer() async {
+    try {
+      print('=== Music: init player');
+      await _player.setLoopMode(LoopMode.one);
+      await _player.setVolume(musicVolume);
+      await _player.setAsset(tracks[0]['asset']!);
+      print('=== Music: asset loaded OK');
+
+      // Log trạng thái player
+      _player.playerStateStream.listen((state) {
+        print('=== Music state: ${state.processingState} | playing: ${state.playing}');
+      });
+      _player.playbackEventStream.listen(
+            (event) => print('=== Music event: $event'),
+        onError: (e, st) => print('=== Music ERROR: $e'),
+      );
+    } catch (e, st) {
+      print('=== Music init FAILED: $e');
+      print(st);
+    }
+  }
+
+  Future<void> _loadTrack(int index) async {
+    try {
+      await _player.setAsset(tracks[index]['asset']!);
+    } catch (e) {
+      print('=== Music load failed: $e');
+    }
+  }
+
+  Future<void> toggleMusic() async {
+    isMusicEnabled = !isMusicEnabled;
+    if (isMusicEnabled && _player.processingState != ProcessingState.idle) {
+      unawaited(_player.play());
+    } else {
+      await _player.pause();
+    }
+    notifyListeners();
+  }
+
+  Future<void> setTrack(int index) async {
+    currentTrackIndex = index;
+    final wasPlaying = _player.playing;
+    await _loadTrack(index);
+    if (wasPlaying) await _player.play();
+    notifyListeners();
+  }
+
+  Future<void> setVolume(double v) async {
+    musicVolume = v;
+    await _player.setVolume(v);
+    notifyListeners();
+  }
+
+  void playMusic() {
+    if (isMusicEnabled) unawaited(_player.play());
+  }
+
+  Future<void> stopMusic() async {
+    await _player.pause();
+    await _player.seek(Duration.zero);
+  }
+  // ── Getters ──────────────────────────────────────────────────────────────────
 
   int get total => _durations[mode]!;
   double get progress => 1 - (remaining / total);
@@ -53,16 +134,14 @@ class TimerProvider extends ChangeNotifier {
 
   String _todayKey() {
     final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  /// Gọi khi app khởi động — load sessions & focusedSeconds, reset nếu sang ngày mới
   Future<void> loadPersistedStats() async {
     final savedDate = await TokenStorage.readRaw(_kSavedDate);
     final today = _todayKey();
 
     if (savedDate != today) {
-      // Sang ngày mới → reset
       sessions       = 0;
       focusedSeconds = 0;
       await _persistStats();
@@ -72,6 +151,7 @@ class TimerProvider extends ChangeNotifier {
       sessions       = int.tryParse(s ?? '0') ?? 0;
       focusedSeconds = int.tryParse(f ?? '0') ?? 0;
     }
+    await _initPlayer();
     notifyListeners();
   }
 
@@ -98,18 +178,27 @@ class TimerProvider extends ChangeNotifier {
 
   Future<void> start({bool inRoom = false}) async {
     if (inRoom) return;
+
+    _ticker?.cancel();
+    _ticker = null;
+
     if (mode == TimerMode.focus) {
       try {
+        print('=== Session start: calling API');
         final res = await _dio.post('/api/sessions/start', data: {
           'durationMinutes': _durations[mode]! ~/ 60,
           if (selectedTaskId != null) 'taskId': selectedTaskId,
         });
+        print('=== Session start: response ${res.statusCode} ${res.data}');
         _currentSessionId = res.data['id'];
       } catch (e) {
-        print('=== Session start failed: $e');
+        print('=== Session start FAILED: $e');
         return;
       }
+      // Không await — fire and forget
+      if (isMusicEnabled) unawaited(_player.play());
     }
+
     status = TimerStatus.running;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     notifyListeners();
@@ -118,20 +207,25 @@ class TimerProvider extends ChangeNotifier {
   void pause() {
     status = TimerStatus.paused;
     _ticker?.cancel();
+    _player.pause();
     notifyListeners();
   }
 
   void resume() {
     status = TimerStatus.running;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    if (isMusicEnabled && mode == TimerMode.focus) _player.play();
     notifyListeners();
   }
 
   Future<void> abandon() async {
     _ticker?.cancel();
+    _ticker = null;
+    await _player.pause();
+    await _player.seek(Duration.zero);
     await _endSession('ABANDONED');
-    status    = TimerStatus.idle;
-    remaining = _durations[mode]!;
+    status            = TimerStatus.idle;
+    remaining         = _durations[mode]!;
     selectedTaskId    = null;
     selectedTaskTitle = null;
     notifyListeners();
@@ -140,10 +234,8 @@ class TimerProvider extends ChangeNotifier {
   void _tick() {
     if (remaining > 0) {
       remaining--;
-      // Đếm thêm 1 giây focused nếu đang focus mode
       if (mode == TimerMode.focus) {
         focusedSeconds++;
-        // Persist mỗi 30s để tránh write quá nhiều
         if (focusedSeconds % 30 == 0) _persistStats();
       }
       notifyListeners();
@@ -154,6 +246,9 @@ class TimerProvider extends ChangeNotifier {
 
   Future<void> _onComplete() async {
     _ticker?.cancel();
+    _ticker = null;
+    await _player.pause();
+    await _player.seek(Duration.zero);
     status = TimerStatus.idle;
     if (mode == TimerMode.focus) {
       sessions++;
@@ -200,6 +295,7 @@ class TimerProvider extends ChangeNotifier {
   @override
   void dispose() {
     _ticker?.cancel();
+    _player.dispose();
     if (status != TimerStatus.idle) {
       _endSession('ABANDONED');
     }

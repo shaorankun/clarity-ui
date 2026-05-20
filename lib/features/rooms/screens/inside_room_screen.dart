@@ -5,7 +5,7 @@ import '../models/room_model.dart';
 import '../providers/room_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../features/auth/providers/auth_provider.dart';
-import '../../../shared/widgets/circular_timer.dart';
+import '../../timer/providers/timer_provider.dart';
 
 class InsideRoomScreen extends StatefulWidget {
   final String roomId;
@@ -23,38 +23,82 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
       final room = context.read<RoomProvider>();
       await room.fetchRoom(widget.roomId);
       await room.connectWebSocket(widget.roomId);
+
+      // Nếu vào room đang giữa session thì play nhạc luôn
+      final session = room.roomSession;
+      if (session?.status == 'FOCUSING' || session?.status == 'BREAK') {
+        context.read<TimerProvider>().playMusic();
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final room = context.watch<RoomProvider>();
-    final auth = context.watch<AuthProvider>();
+    final room  = context.watch<RoomProvider>();
+    final timer = context.read<TimerProvider>();
+    final auth  = context.watch<AuthProvider>();
+
+    // React to session status changes
+    final sessionStatus = room.roomSession?.status ?? 'IDLE';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (sessionStatus == 'FOCUSING' || sessionStatus == 'BREAK') {
+        timer.playMusic();
+      } else if (sessionStatus == 'IDLE') {
+        timer.stopMusic();
+      }
+    });
+
     final userId = auth.user?.id ?? '';
     final isOwner = room.isOwner(userId);
     final session = room.roomSession;
 
+    // Khi currentRoom = null (đã leave/cleanup), tự pop về RoomsScreen
+    if (!room.isLoading && room.currentRoom == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+
+    final String bgPath = room.getRoomBackground(widget.roomId);
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+        decoration: BoxDecoration(
+          gradient: AppColors.backgroundGradient,
+          // Đặt hình nền vào đây
+          image: DecorationImage(
+            image: AssetImage(bgPath),
+            fit: BoxFit.cover,
+            opacity: 0.15, // Cài đặt độ mờ thấp tránh gây chói
+          ),
+        ),
         child: SafeArea(
           child: room.isLoading
-              ? const Center(child: CircularProgressIndicator(
-              color: AppColors.primary))
+              ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
               : room.currentRoom == null
-              ? const Center(child: Text('Room not found',
-              style: TextStyle(color: AppColors.textSecondary)))
+              ? const Center(
+              child: Text('Room not found',
+                  style: TextStyle(color: AppColors.textSecondary)))
               : Column(
             children: [
               _buildHeader(context, room),
               const Spacer(),
-              _buildStatusChip(session),
-              const SizedBox(height: 24),
+              _RoomMusicBar(timer: context.read<TimerProvider>()),
+              const SizedBox(height: 16),
               _buildTimer(room, session),
               const SizedBox(height: 32),
-              _buildMembers(room),
+              SizedBox(
+                height: 50,
+                child: isOwner && session?.status == 'FOCUSING'
+                    ? _buildFocusingOwnerControls(context, room, session)
+                    : _buildStartFocusButton(context, room, session, isOwner),
+              ),
+              const SizedBox(height: 32),
+              _buildMembersSection(room),
               const Spacer(),
-              if (isOwner) _buildOwnerControls(context, room, session),
               _buildLeaveButton(context, room),
               const SizedBox(height: 24),
             ],
@@ -64,21 +108,42 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
     );
   }
 
+  // ─── Header ───────────────────────────────────────────────────────────────
+
   Widget _buildHeader(BuildContext context, RoomProvider room) {
+    final memberCount = room.currentRoom!.members.length;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.fromLTRB(8, 12, 16, 0),
       child: Row(
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back_ios,
-                color: AppColors.textPrimary),
+                color: AppColors.textPrimary, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
           Expanded(
-            child: Text(room.currentRoom!.name,
-                style: const TextStyle(fontSize: 18,
-                    fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                overflow: TextOverflow.ellipsis),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room.currentRoom!.name,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '$memberCount MEMBER${memberCount != 1 ? 'S' : ''} ACTIVE',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.8),
+                ),
+              ],
+            ),
           ),
           // Invite code chip
           GestureDetector(
@@ -86,25 +151,34 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
               Clipboard.setData(
                   ClipboardData(text: room.currentRoom!.inviteCode));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Invite code copied!'),
+                const SnackBar(
+                    content: Text('Invite code copied!'),
                     duration: Duration(seconds: 2)),
               );
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.2),
+                color: AppColors.surfaceLight,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.primary.withOpacity(0.4)),
+                border: Border.all(
+                    color: AppColors.textMuted.withOpacity(0.4)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.copy, color: AppColors.primary, size: 12),
+                  Text(
+                    'ID: ${room.currentRoom!.inviteCode}',
+                    style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5),
+                  ),
                   const SizedBox(width: 6),
-                  Text(room.currentRoom!.inviteCode,
-                      style: const TextStyle(color: AppColors.primary,
-                          fontWeight: FontWeight.bold, letterSpacing: 2)),
+                  const Icon(Icons.copy_outlined,
+                      color: AppColors.textSecondary, size: 14),
                 ],
               ),
             ),
@@ -114,113 +188,98 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
     );
   }
 
-  Widget _buildStatusChip(RoomSession? session) {
-    final status = session?.status ?? 'IDLE';
-    final label = status == 'FOCUSING' ? '🎯 Focusing'
-        : status == 'BREAK' ? '☕ On Break'
-        : '💤 Idle';
-    final color = status == 'FOCUSING' ? AppColors.primary
-        : status == 'BREAK' ? AppColors.breakColor
-        : AppColors.textMuted;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(label,
-          style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-    );
-  }
+  // ─── Timer ────────────────────────────────────────────────────────────────
 
   Widget _buildTimer(RoomProvider room, RoomSession? session) {
     final isActive = session?.status == 'FOCUSING' ||
         session?.status == 'BREAK';
     final total = (session?.durationMinutes ?? 25) * 60;
-    final progress = total == 0 ? 0.0
-        : 1 - (room.remainingSeconds / total);
-
-    return CircularTimer(
-      progress: isActive ? progress.clamp(0.0, 1.0) : 0.0,
-      timeLabel: isActive ? room.countdownLabel : '--:--',
-      isRunning: isActive,
-    );
-  }
-
-  Widget _buildMembers(RoomProvider room) {
-    final members = room.currentRoom!.members;
-    return Column(
-      children: [
-        Text('${members.length} member${members.length != 1 ? 's' : ''}',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: members.map((m) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.primary.withOpacity(0.2),
-                  child: Text(
-                      m.displayName.isNotEmpty
-                          ? m.displayName[0].toUpperCase() : '?',
-                      style: const TextStyle(color: AppColors.primary,
-                          fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(height: 6),
-                Text(m.displayName,
-                    style: const TextStyle(color: AppColors.textSecondary,
-                        fontSize: 11)),
-              ],
-            ),
-          )).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOwnerControls(
-      BuildContext context, RoomProvider room, RoomSession? session) {
+    final progress =
+    total == 0 ? 0.0 : 1 - (room.remainingSeconds / total);
     final status = session?.status ?? 'IDLE';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      child: Column(
+    final sessionLabel = status == 'FOCUSING'
+        ? 'FOCUS SESSION'
+        : status == 'BREAK'
+        ? 'BREAK TIME'
+        : 'FOCUS SESSION';
+
+    return SizedBox(
+      width: 260,
+      height: 260,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          const Text('You are the host 👑',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              if (status != 'FOCUSING')
-                Expanded(
-                  child: _controlButton(
-                    label: '▶ Start Focus',
-                    color: AppColors.primary,
-                    onTap: () => _showDurationPicker(context, room, 'focus'),
+          // Outer glow
+          if (isActive)
+            Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.25),
+                    blurRadius: 50,
+                    spreadRadius: 12,
                   ),
-                ),
-              if (status == 'FOCUSING') ...[
-                Expanded(
-                  child: _controlButton(
-                    label: '☕ Take Break',
-                    color: AppColors.breakColor,
-                    onTap: () => _showDurationPicker(context, room, 'break'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _controlButton(
-                    label: '⏹ End',
-                    color: AppColors.danger,
-                    onTap: room.endSession,
-                  ),
+                ],
+              ),
+            ),
+
+          // Dark inner circle background
+          Container(
+            width: 220,
+            height: 220,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF13131F),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
                 ),
               ],
+            ),
+          ),
+
+          // Progress ring
+          SizedBox(
+            width: 240,
+            height: 240,
+            child: CircularProgressIndicator(
+              value: isActive ? progress.clamp(0.0, 1.0) : 0.0,
+              strokeWidth: 6,
+              backgroundColor: AppColors.surfaceLight,
+              valueColor:
+              const AlwaysStoppedAnimation(AppColors.primary),
+              strokeCap: StrokeCap.round,
+            ),
+          ),
+
+          // Label + time
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                sessionLabel,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 2),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isActive ? room.countdownLabel : '00:00',
+                style: const TextStyle(
+                  fontSize: 44,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 1,
+                ),
+              ),
             ],
           ),
         ],
@@ -228,26 +287,265 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
     );
   }
 
-  Widget _controlButton({
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.4)),
+  // ─── Start Focus Button (always visible, disabled for non-owner) ──────────
+
+  Widget _buildStartFocusButton(BuildContext context, RoomProvider room,
+      RoomSession? session, bool isOwner) {
+    final isEnabled = isOwner;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: GestureDetector(
+        onTap: isEnabled
+            ? () => _showDurationPicker(context, room, 'focus')
+            : null,
+        child: Container(
+          width: double.infinity,
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: isEnabled
+                ? const LinearGradient(
+              colors: [Color(0xFF6B50F6), Color(0xFF8A6CF7)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            )
+                : null,
+            color: isEnabled ? null : AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: isEnabled
+                ? [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ]
+                : null,
+          ),
+          child: Text(
+            isEnabled ? 'Start Focus' : 'Focusing Together',
+            style: TextStyle(
+              color: isEnabled ? Colors.white : AppColors.textMuted,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
         ),
-        child: Text(label,
-            style: TextStyle(color: color, fontWeight: FontWeight.w600)),
       ),
     );
   }
+
+  // ─── Members Section ──────────────────────────────────────────────────────
+
+  Widget _buildMembersSection(RoomProvider room) {
+    final members = room.currentRoom!.members;
+    final ownerId = room.currentRoom!.ownerId;
+    final session = room.roomSession;
+    final sessionStatus = session?.status ?? 'IDLE';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Members',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary),
+              ),
+              Icon(Icons.filter_list_rounded,
+                  color: AppColors.textSecondary, size: 20),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Member list
+          ...members.map((m) => _buildMemberCard(m, sessionStatus, m.userId == ownerId)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemberCard(RoomMember member, String sessionStatus, bool isOwner) {
+    final isFocusing = sessionStatus == 'FOCUSING';
+    final isBreak    = sessionStatus == 'BREAK';
+    final isActive   = isFocusing || isBreak;
+
+    final statusColor = isFocusing
+        ? const Color(0xFF4CAF50)
+        : isBreak
+        ? const Color(0xFFFFB74D)
+        : AppColors.textMuted;
+
+    final statusLabel = isFocusing
+        ? 'Focusing'
+        : isBreak
+        ? 'On Break'
+        : 'Idle';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16162A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: AppColors.surfaceLight.withOpacity(0.6), width: 1),
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withOpacity(0.25),
+              border: Border.all(
+                  color: AppColors.primary.withOpacity(0.4), width: 1.5),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              member.displayName.isNotEmpty
+                  ? member.displayName[0].toUpperCase()
+                  : '?',
+              style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16),
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Name + status
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    member.displayName,
+                    style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15),
+                  ),
+                  if (isOwner) ...[
+                    const SizedBox(width: 5),
+                    const Text('👑', style: TextStyle(fontSize: 11)),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: statusColor,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Owner controls khi đang FOCUSING ────────────────────────────────────
+
+  Widget _buildFocusingOwnerControls(
+      BuildContext context, RoomProvider room, RoomSession? session) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          // Take Break — filled gradient button (primary style)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showDurationPicker(context, room, 'break'),
+              child: Container(
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6B50F6), Color(0xFF8A6CF7)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Take Break',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // End — dark outline button
+          Expanded(
+            child: GestureDetector(
+              onTap: room.endSession,
+              child: Container(
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E30),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(
+                    color: AppColors.surfaceLight,
+                    width: 1.5,
+                  ),
+                ),
+                child: const Text(
+                  'End',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Duration Picker ──────────────────────────────────────────────────────
 
   void _showDurationPicker(
       BuildContext context, RoomProvider room, String type) {
@@ -264,14 +562,20 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(type == 'focus' ? 'Focus duration' : 'Break duration',
-                style: const TextStyle(fontSize: 18,
-                    fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            Text(
+                type == 'focus'
+                    ? 'Focus duration'
+                    : 'Break duration',
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary)),
             const SizedBox(height: 16),
             Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: options.map((min) => GestureDetector(
+              children: options
+                  .map((min) => GestureDetector(
                 onTap: () {
                   Navigator.pop(context);
                   if (type == 'focus') {
@@ -288,10 +592,12 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text('$min min',
-                      style: const TextStyle(color: AppColors.textPrimary,
+                      style: const TextStyle(
+                          color: AppColors.textPrimary,
                           fontWeight: FontWeight.w600)),
                 ),
-              )).toList(),
+              ))
+                  .toList(),
             ),
             const SizedBox(height: 16),
           ],
@@ -300,6 +606,8 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
     );
   }
 
+  // ─── Leave Button ─────────────────────────────────────────────────────────
+
   Widget _buildLeaveButton(BuildContext context, RoomProvider room) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -307,24 +615,42 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
         onTap: () => _confirmLeave(context, room),
         child: Container(
           width: double.infinity,
-          height: 46,
+          height: 54,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.danger.withOpacity(0.4)),
+            color: AppColors.danger.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: AppColors.danger.withOpacity(0.35), width: 1),
           ),
-          child: const Text('Leave Room',
-              style: TextStyle(color: AppColors.danger,
-                  fontWeight: FontWeight.w600)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.logout_rounded,
+                  color: AppColors.danger, size: 18),
+              SizedBox(width: 8),
+              Text('Leave Room',
+                  style: TextStyle(
+                      color: AppColors.danger,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15)),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  // ─── Confirm Leave Dialog ─────────────────────────────────────────────────
+
   void _confirmLeave(BuildContext context, RoomProvider room) {
+    // Lưu navigator của screen trước khi mở dialog,
+    // tránh dùng context sau khi dialog unmount gây lỗi pop không chạy
+    final screenNavigator = Navigator.of(context);
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('Leave Room?',
             style: TextStyle(color: AppColors.textPrimary)),
@@ -332,20 +658,86 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
             style: TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
             child: const Text('Cancel',
                 style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context); // đóng dialog
+              Navigator.of(dialogCtx).pop(); // đóng dialog
               await room.leaveRoom();
-              if (context.mounted) Navigator.pop(context); // về lobby
+              screenNavigator.pop(); // về lobby — dùng navigator đã lưu
             },
             child: const Text('Leave',
                 style: TextStyle(color: AppColors.danger)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RoomMusicBar extends StatelessWidget {
+  final TimerProvider timer;
+  const _RoomMusicBar({required this.timer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<TimerProvider>(
+      builder: (_, t, __) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B1A26),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF494455).withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () => t.toggleMusic(),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  t.isMusicEnabled ? Icons.music_note_rounded : Icons.music_off_rounded,
+                  key: ValueKey(t.isMusicEnabled),
+                  color: t.isMusicEnabled ? AppColors.primary : AppColors.textMuted.withOpacity(0.4),
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Lofi music',
+                style: TextStyle(
+                  color: t.isMusicEnabled ? AppColors.textPrimary : AppColors.textMuted.withOpacity(0.4),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 80,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: SliderComponentShape.noOverlay,
+                  activeTrackColor: AppColors.primary,
+                  inactiveTrackColor: const Color(0xFF494455).withOpacity(0.4),
+                  thumbColor: AppColors.primary,
+                ),
+                child: Slider(
+                  value: t.musicVolume,
+                  min: 0,
+                  max: 1,
+                  onChanged: (v) => t.setVolume(v),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

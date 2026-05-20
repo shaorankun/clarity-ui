@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 import '../../../core/network/dio_client.dart';
@@ -23,15 +24,39 @@ class RoomProvider extends ChangeNotifier {
 
   String? _currentSessionId;
 
+  // Flag để tránh race condition khi đang leave
+  bool _isLeaving = false;
+
   // WebSocket
   StompClient? _stompClient;
   bool isConnected = false;
 
   final _dio = DioClient.instance;
 
+  final Map<String, String> localRoomBackgrounds = {};
+
+  String getRoomBackground(String roomId) {
+    // Nếu vừa tạo phòng và đã random hình, lấy ra dùng luôn
+    if (localRoomBackgrounds.containsKey(roomId)) {
+      return localRoomBackgrounds[roomId]!;
+    }
+    // Hardcode fallback cho các phòng người khác tạo: dùng Hash của roomId để cố định 1 hình
+    final themes = ['spring', 'summer', 'autumn', 'winter'];
+    final hash = roomId.hashCode.abs();
+    final theme = themes[hash % 4];
+    final index = (hash % 4) + 1; // Từ 1 đến 4
+
+    // Format tên file đúng với thư mục của bạn (ví dụ: summer1.png)
+    // LƯU Ý: Nếu đuôi file của bạn là .jpg thì sửa .png thành .jpg ở dưới nhé
+    final path = 'assets/pictures/$theme$index.jpg';
+
+    localRoomBackgrounds[roomId] = path;
+    return path;
+  }
+
   // ── REST API ─────────────────────────────────────────
 
-  Future<bool> createRoom(String name, {bool isPublic = false}) async {
+  Future<bool> createRoom(String name, {bool isPublic = false, String? selectedTheme}) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -40,11 +65,20 @@ class RoomProvider extends ChangeNotifier {
         'name': name,
         'isPublic': isPublic,
       });
-      print('=== createRoom data: name=$name, isPublic=$isPublic');
-      print('=== createRoom response: ${res.data}');
       final roomId = StudyRoom.fromJson(res.data).id;
+
+      // Nếu có chọn theme, random hình (1-4) và ghép chuỗi tên file không có dấu gạch dưới
+      if (selectedTheme != null) {
+        final randomImageIndex = math.Random().nextInt(4) + 1;
+        localRoomBackgrounds[roomId] = 'assets/pictures/$selectedTheme$randomImageIndex.jpg';
+      }
+
       await fetchRoom(roomId);
       await TokenStorage.saveRoomId(currentRoom!.id);
+
+      if (isPublic) {
+        await fetchPublicRooms();
+      }
       return true;
     } on DioException catch (e) {
       errorMessage = e.response?.data['message'] ?? 'Failed to create room';
@@ -119,22 +153,33 @@ class RoomProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final res = await _dio.get('/api/rooms/public');
-      publicRooms = (res.data as List)
-          .map((e) => StudyRoom.fromJson(e))
-          .toList();
+      publicRooms = (res.data as List).map((e) => StudyRoom.fromJson(e)).toList();
     } catch (_) {}
     isLoadingPublic = false;
     notifyListeners();
   }
 
+  Future<void> refreshPublicRoomsSilently() async {
+    try {
+      final res = await _dio.get('/api/rooms/public');
+      final newData = (res.data as List).map((e) => StudyRoom.fromJson(e)).toList();
+
+      publicRooms = newData;
+      notifyListeners();
+    } catch (_) {
+    }
+  }
+
   Future<void> leaveRoom() async {
     if (currentRoom == null) return;
+    _isLeaving = true;
     try {
       await _dio.delete('/api/rooms/${currentRoom!.id}/leave');
     } catch (_) {}
     await _cancelSession();
     await TokenStorage.clearRoomId();
     _cleanup();
+    _isLeaving = false;
   }
 
   Future<void> restoreRoom() async {
@@ -175,6 +220,8 @@ class RoomProvider extends ChangeNotifier {
             destination: '/topic/room/$roomId',
             callback: (frame) {
               print('=== WS: Received: ${frame.body}');
+              // Không xử lý message nếu đang leave hoặc đã rời phòng
+              if (_isLeaving || currentRoom == null) return;
               if (frame.body == null) return;
               final data = jsonDecode(frame.body!);
               final newSession = RoomSession.fromJson(data);
@@ -225,11 +272,14 @@ class RoomProvider extends ChangeNotifier {
   }
 
   Future<void> _refreshMembers(String roomId) async {
+    // Không refresh nếu đang trong quá trình leave
+    if (_isLeaving || currentRoom == null) return;
     try {
       final res = await _dio.get('/api/rooms/$roomId');
       final updatedRoom = StudyRoom.fromJson(res.data);
-      // Chỉ update nếu member list thay đổi
-      if (updatedRoom.members.length != currentRoom?.members.length) {
+      // Chỉ update nếu member list thay đổi và chưa leave
+      if (!_isLeaving && currentRoom != null &&
+          updatedRoom.members.length != currentRoom?.members.length) {
         currentRoom = updatedRoom;
         notifyListeners();
       }
@@ -310,6 +360,7 @@ class RoomProvider extends ChangeNotifier {
     _countdown?.cancel();
     _pollingTimer?.cancel();
     _stompClient?.deactivate();
+    _stompClient = null;   // null ngay để callback không thể fire tiếp
     currentRoom      = null;
     roomSession      = null;
     remainingSeconds = 0;
