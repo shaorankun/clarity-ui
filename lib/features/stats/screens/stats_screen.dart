@@ -96,15 +96,21 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildContent(BuildContext context, StatsProvider stats) {
     final o = stats.overview!;
+    // today = phần tử cuối của weekly (backend luôn trả 7 ngày, last = hôm nay UTC)
     final today = o.weekly.isNotEmpty ? o.weekly.last : null;
 
-    // Date range label: show Mon–Sun of current week
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final weekEnd   = weekStart.add(const Duration(days: 6));
-    final months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final dateLabel =
-        '${months[weekStart.month - 1]} ${weekStart.day} — ${months[weekEnd.month - 1]} ${weekEnd.day}, ${weekEnd.year}';
+    // Date range label: lấy từ date field của weekly thay vì DateTime.now()
+    // FIX: không dùng DateTime.now() để tránh lệch timezone thiết bị vs server
+    String dateLabel = '';
+    if (o.weekly.isNotEmpty) {
+      final firstDate = DateTime.tryParse(o.weekly.first.date);
+      final lastDate  = DateTime.tryParse(o.weekly.last.date);
+      final months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      if (firstDate != null && lastDate != null) {
+        dateLabel =
+        '${months[firstDate.month - 1]} ${firstDate.day} — ${months[lastDate.month - 1]} ${lastDate.day}, ${lastDate.year}';
+      }
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -162,16 +168,20 @@ class _StatsScreenState extends State<StatsScreen> {
                 label: 'TOTAL FOCUS',
                 icon: Icons.timer_outlined,
                 iconColor: _C.primary,
-                value: '${o.totalMinutes ~/ 60}',
+                // FIX: dùng today từ weekly.last thay vì gọi /daily riêng
+                value: '${(today?.totalMinutes ?? 0) ~/ 60}',
                 unit: 'h',
-                subUnit: o.totalMinutes % 60 > 0 ? '${o.totalMinutes % 60}m' : null,
+                subUnit: (today?.totalMinutes ?? 0) % 60 > 0
+                    ? '${(today?.totalMinutes ?? 0) % 60}m'
+                    : null,
                 valueColor: _C.primary,
               ),
               _MetricCard(
                 label: 'TOTAL SESSIONS',
                 icon: Icons.layers_outlined,
                 iconColor: _C.tertiary,
-                value: '${o.totalSessions}',
+                // FIX: dùng today từ weekly.last thay vì gọi /daily riêng
+                value: '${today?.sessionCount ?? 0}',
                 unit: '',
                 valueColor: _C.tertiary,
               ),
@@ -269,17 +279,10 @@ class _TopAppBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Menu icon (left)
             GestureDetector(
               onTap: () {},
-              child: const Icon(
-                Icons.menu,
-                color: _C.primary,
-                size: 24,
-              ),
+              child: const Icon(Icons.menu, color: _C.primary, size: 24),
             ),
-
-            // Logo (center)
             const Text(
               'Clarity',
               style: TextStyle(
@@ -290,8 +293,6 @@ class _TopAppBar extends StatelessWidget {
                 letterSpacing: -0.3,
               ),
             ),
-
-            // Avatar (right)
             Container(
               width: 34,
               height: 34,
@@ -387,7 +388,6 @@ class _MetricCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Label row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -405,7 +405,6 @@ class _MetricCard extends StatelessWidget {
               Icon(icon, color: iconColor.withOpacity(0.9), size: 20),
             ],
           ),
-          // Value row
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -426,10 +425,7 @@ class _MetricCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Text(
                     unit,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: _C.outline,
-                    ),
+                    style: const TextStyle(fontSize: 14, color: _C.outline),
                   ),
                 ),
               ],
@@ -477,31 +473,11 @@ class _TodayCard extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _TodayItem(
-              label: 'FOCUS TIME',
-              value: focusLabel,
-              valueColor: _C.primary,
-            ),
-            VerticalDivider(
-              color: _C.outlineVar.withOpacity(0.3),
-              thickness: 1,
-              width: 1,
-            ),
-            _TodayItem(
-              label: 'SESSIONS',
-              value: '$sessions',
-              valueColor: _C.secondary,
-            ),
-            VerticalDivider(
-              color: _C.outlineVar.withOpacity(0.3),
-              thickness: 1,
-              width: 1,
-            ),
-            _TodayItem(
-              label: 'TASKS DONE',
-              value: '$tasks',
-              valueColor: _C.tertiary,
-            ),
+            _TodayItem(label: 'FOCUS TIME', value: focusLabel, valueColor: _C.primary),
+            VerticalDivider(color: _C.outlineVar.withOpacity(0.3), thickness: 1, width: 1),
+            _TodayItem(label: 'SESSIONS', value: '$sessions', valueColor: _C.secondary),
+            VerticalDivider(color: _C.outlineVar.withOpacity(0.3), thickness: 1, width: 1),
+            _TodayItem(label: 'TASKS DONE', value: '$tasks', valueColor: _C.tertiary),
           ],
         ),
       ),
@@ -553,7 +529,6 @@ class _TodayItem extends StatelessWidget {
 }
 
 // ── Weekly Bar Chart ──────────────────────────────────────────────────────────
-// ── Weekly Bar Chart (Đã sửa đổi hiển thị tooltip trên đầu cột) ────────────────
 class _WeeklyBarChart extends StatefulWidget {
   final List<DailyStats> weekly;
   final StatsProvider stats;
@@ -567,30 +542,35 @@ class _WeeklyBarChart extends StatefulWidget {
 class _WeeklyBarChartState extends State<_WeeklyBarChart> {
   int _selectedIndex = -1;
 
+  // FIX: helper lấy label ngày từ date string của API, không dùng DateTime.now()
+  String _dayLabel(String dateStr) {
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final parsed = DateTime.tryParse(dateStr);
+    if (parsed == null) return '?';
+    return labels[parsed.weekday - 1]; // weekday: 1=Mon ... 7=Sun
+  }
+
   @override
   Widget build(BuildContext context) {
     final weekly     = widget.weekly;
     final maxMinutes = weekly.map((d) => d.totalMinutes).fold(0, (a, b) => a > b ? a : b);
-    const dayLabels  = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    const barHeight  = 100.0; // Chiều cao tối đa của cột
+    const barHeight  = 100.0;
     const minBar     = 6.0;
 
     return SizedBox(
-      // Tăng chiều cao tổng thể một chút để có chỗ cho text hiện lên trên đầu cột
       height: barHeight + 50,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(weekly.length, (i) {
-          final d       = weekly[i];
-          final ratio   = maxMinutes == 0 ? 0.0 : d.totalMinutes / maxMinutes;
-          final isToday = i == weekly.length - 1;
+          final d          = weekly[i];
+          final ratio      = maxMinutes == 0 ? 0.0 : d.totalMinutes / maxMinutes;
+          final isToday    = i == weekly.length - 1;
           final isSelected = _selectedIndex == i;
-          final barH    = ratio == 0 ? minBar : (barHeight * ratio).clamp(minBar, barHeight);
+          final barH       = ratio == 0 ? minBar : (barHeight * ratio).clamp(minBar, barHeight);
 
-          final todayWd  = DateTime.now().weekday;
-          final dayIdx   = ((todayWd - 1) - (weekly.length - 1 - i)) % 7;
-          final label    = dayLabels[dayIdx < 0 ? dayIdx + 7 : dayIdx];
+          // FIX: label lấy từ date field của API thay vì tính từ DateTime.now()
+          final label = _dayLabel(d.date);
 
           return Expanded(
             child: GestureDetector(
@@ -603,9 +583,9 @@ class _WeeklyBarChartState extends State<_WeeklyBarChart> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // THỜI GIAN HIỆN TRÊN ĐẦU CỘT
+                  // Tooltip thời gian trên đầu cột
                   Opacity(
-                    opacity: isSelected ? 1.0 : 0.0, // Chỉ hiện khi được chọn
+                    opacity: isSelected ? 1.0 : 0.0,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.only(bottom: 4),
@@ -613,7 +593,7 @@ class _WeeklyBarChartState extends State<_WeeklyBarChart> {
                         widget.stats.formatMinutes(d.totalMinutes),
                         style: const TextStyle(
                           fontFamily: 'SpaceGrotesk',
-                          fontSize: 10, // Kích thước nhỏ gọn
+                          fontSize: 10,
                           fontWeight: FontWeight.w700,
                           color: _C.primary,
                         ),
@@ -621,7 +601,7 @@ class _WeeklyBarChartState extends State<_WeeklyBarChart> {
                     ),
                   ),
 
-                  // CỘT BIỂU ĐỒ
+                  // Cột biểu đồ
                   AnimatedContainer(
                     duration: Duration(milliseconds: 400 + i * 60),
                     curve: Curves.easeOut,
@@ -636,10 +616,7 @@ class _WeeklyBarChartState extends State<_WeeklyBarChart> {
                           const Color(0xFFCEBDFF).withOpacity(0.7),
                           const Color(0xFFB89CFF).withOpacity(0.5),
                         ]
-                            : const [
-                          Color(0xFFCEBDFF),
-                          Color(0xFFB89CFF),
-                        ],
+                            : const [Color(0xFFCEBDFF), Color(0xFFB89CFF)],
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                       )
@@ -665,14 +642,12 @@ class _WeeklyBarChartState extends State<_WeeklyBarChart> {
                   ),
                   const SizedBox(height: 8),
 
-                  // NHÃN THỨ (M, T, W...)
+                  // Nhãn thứ
                   Text(
                     label,
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: (isToday || isSelected)
-                          ? FontWeight.w700
-                          : FontWeight.w400,
+                      fontWeight: (isToday || isSelected) ? FontWeight.w700 : FontWeight.w400,
                       color: (isToday || isSelected) ? _C.primary : _C.outline,
                     ),
                   ),
@@ -695,20 +670,24 @@ class _PersonalBestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Find best day
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    int bestIdx    = 0;
+
+    int bestIdx = 0;
     for (var i = 1; i < weekly.length; i++) {
       if (weekly[i].totalMinutes > weekly[bestIdx].totalMinutes) bestIdx = i;
     }
     final bestDay = weekly.isNotEmpty ? weekly[bestIdx] : null;
 
-    final todayWd    = DateTime.now().weekday;
-    final rawDayIdx  = ((todayWd - 1) - (weekly.length - 1 - bestIdx)) % 7;
-    final dayName    = weekly.isNotEmpty
-        ? dayNames[rawDayIdx < 0 ? rawDayIdx + 7 : rawDayIdx]
-        : 'Tuesday';
-    final timeLabel  = bestDay != null ? stats.formatMinutes(bestDay.totalMinutes) : '—';
+    // FIX: lấy tên ngày từ date field của API, không tính từ DateTime.now()
+    String dayName = '—';
+    if (bestDay != null) {
+      final parsed = DateTime.tryParse(bestDay.date);
+      if (parsed != null) {
+        dayName = dayNames[parsed.weekday - 1];
+      }
+    }
+
+    final timeLabel = bestDay != null ? stats.formatMinutes(bestDay.totalMinutes) : '—';
 
     return Stack(
       children: [
@@ -765,7 +744,6 @@ class _PersonalBestCard extends StatelessWidget {
             ],
           ),
         ),
-        // Decorative glow
         Positioned(
           right: -20,
           bottom: -20,
