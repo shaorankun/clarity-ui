@@ -60,12 +60,15 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
               const Spacer(),
               _buildTimer(room, session),
               const SizedBox(height: 32),
-              _buildStartFocusButton(context, room, session, isOwner),
+              SizedBox(
+                height: 50,
+                child: isOwner && session?.status == 'FOCUSING'
+                    ? _buildFocusingOwnerControls(context, room, session)
+                    : _buildStartFocusButton(context, room, session, isOwner),
+              ),
               const SizedBox(height: 32),
               _buildMembersSection(room),
               const Spacer(),
-              if (isOwner && session?.status == 'FOCUSING')
-                _buildFocusingOwnerControls(context, room, session),
               _buildLeaveButton(context, room),
               const SizedBox(height: 24),
             ],
@@ -239,7 +242,7 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                isActive ? room.countdownLabel : '00:00:00',
+                isActive ? room.countdownLabel : '00:00',
                 style: const TextStyle(
                   fontSize: 44,
                   fontWeight: FontWeight.bold,
@@ -258,11 +261,6 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
 
   Widget _buildStartFocusButton(BuildContext context, RoomProvider room,
       RoomSession? session, bool isOwner) {
-    final status = session?.status ?? 'IDLE';
-
-    // Khi đang FOCUSING: chỉ owner thấy controls riêng, ẩn button này
-    if (status == 'FOCUSING') return const SizedBox.shrink();
-
     final isEnabled = isOwner;
 
     return Padding(
@@ -273,7 +271,7 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
             : null,
         child: Container(
           width: double.infinity,
-          height: 54,
+          height: 50,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             gradient: isEnabled
@@ -298,8 +296,7 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
           child: Text(
             'Start Focus',
             style: TextStyle(
-              color:
-              isEnabled ? Colors.white : AppColors.textMuted,
+              color: isEnabled ? Colors.white : AppColors.textMuted,
               fontSize: 16,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.3,
@@ -438,52 +435,72 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
   Widget _buildFocusingOwnerControls(
       BuildContext context, RoomProvider room, RoomSession? session) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _controlButton(
-                  label: '☕ Take Break',
-                  color: AppColors.breakColor,
-                  onTap: () =>
-                      _showDurationPicker(context, room, 'break'),
+          // Take Break — filled gradient button (primary style)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showDurationPicker(context, room, 'break'),
+              child: Container(
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6B50F6), Color(0xFF8A6CF7)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Take Break',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _controlButton(
-                  label: '⏹ End',
-                  color: AppColors.danger,
-                  onTap: room.endSession,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // End — dark outline button
+          Expanded(
+            child: GestureDetector(
+              onTap: room.endSession,
+              child: Container(
+                height: 50,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E30),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(
+                    color: AppColors.surfaceLight,
+                    width: 1.5,
+                  ),
+                ),
+                child: const Text(
+                  'End',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _controlButton({
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.4)),
-        ),
-        child: Text(label,
-            style:
-            TextStyle(color: color, fontWeight: FontWeight.w600)),
       ),
     );
   }
