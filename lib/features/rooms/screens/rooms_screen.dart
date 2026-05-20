@@ -52,6 +52,56 @@ class _RoomsScreenState extends State<RoomsScreen> {
     });
   }
 
+  /// Dùng khi muốn join/create phòng mới.
+  /// Nếu đang trong phòng → hiện confirm dialog trước.
+  /// Sau khi xác nhận → leave phòng cũ rồi join/create phòng mới.
+  Future<void> _switchToRoom(BuildContext context, Future<bool> Function() joinAction) async {
+    final room = context.read<RoomProvider>();
+
+    if (room.currentRoom != null) {
+      // Hỏi xác nhận trước khi thoát phòng cũ
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          backgroundColor: _C.surface,
+          title: const Text(
+            'Leave Current Room?',
+            style: TextStyle(color: _C.onSurface, fontFamily: 'SpaceGrotesk'),
+          ),
+          content: Text(
+            'You are in "${room.currentRoom!.name}". Leave and join the new room?',
+            style: const TextStyle(color: _C.onSurfaceVar),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: _C.outline)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: const Text('Leave & Join', style: TextStyle(color: _C.primary)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await room.leaveRoom();
+    }
+
+    // Thực hiện join/create
+    final ok = await joinAction();
+    if (ok && mounted) {
+      _navigateToRoom(context, room.currentRoom!.id);
+    } else if (!ok && mounted && room.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(room.errorMessage!),
+          backgroundColor: const Color(0xFFCF6679),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = context.watch<RoomProvider>();
@@ -170,10 +220,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
                                     _navigateToRoom(context, r.id);
                                     return;
                                   }
-                                  final ok = await room.joinPublicRoom(r.id);
-                                  if (ok && mounted) {
-                                    _navigateToRoom(context, room.currentRoom!.id);
-                                  }
+                                  // Dùng _switchToRoom: leave phòng cũ trước,
+                                  // rồi join phòng mới — tránh race condition stack
+                                  await _switchToRoom(
+                                    context,
+                                        () => room.joinPublicRoom(r.id),
+                                  );
                                 },
                               ),
                             );
@@ -310,25 +362,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   onTap: room.isLoading ? null : () async {
                     if (ctrl.text.trim().isEmpty) return;
                     final name = ctrl.text.trim();
+                    final isPublicSnapshot = _isPublic;
                     await _abandonSoloIfRunning();
-                    final ok = await room.createRoom(name, isPublic: _isPublic);
-                    if (ok) {
-                      setState(() => _isPublic = false);
-                      Navigator.pop(ctx);
-                      if (mounted) _navigateToRoom(context, room.currentRoom!.id);
-                    } else if (room.errorMessage?.contains('already') == true) {
-                      setState(() => _isPublic = false);
-                      Navigator.pop(ctx);
-                      if (mounted) _showAlreadyInRoomDialog(room, name, isCreate: true);
-                    } else {
-                      if (ctx2.mounted) {
-                        ScaffoldMessenger.of(ctx2).showSnackBar(
-                          SnackBar(
-                              content: Text(room.errorMessage ?? 'Error'),
-                              backgroundColor: AppColors.danger),
-                        );
-                      }
-                    }
+                    setState(() => _isPublic = false);
+                    Navigator.pop(ctx);
+                    // Dùng _switchToRoom: leave phòng cũ (nếu có) trước khi create
+                    await _switchToRoom(
+                      context,
+                          () => room.createRoom(name, isPublic: isPublicSnapshot),
+                    );
                   },
                   child: Container(
                     width: double.infinity,
@@ -454,22 +496,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   if (ctrl.text.trim().length != 6) return;
                   final code = ctrl.text.trim();
                   await _abandonSoloIfRunning();
-                  final ok = await room.joinRoom(code);
-                  if (ok) {
-                    Navigator.pop(ctx);
-                    if (mounted) _navigateToRoom(context, room.currentRoom!.id);
-                  } else if (room.errorMessage?.contains('already') == true) {
-                    Navigator.pop(ctx);
-                    if (mounted) _showAlreadyInRoomDialog(room, code, isCreate: false);
-                  } else {
-                    if (ctx2.mounted) {
-                      ScaffoldMessenger.of(ctx2).showSnackBar(
-                        SnackBar(
-                            content: Text(room.errorMessage ?? 'Error'),
-                            backgroundColor: AppColors.danger),
-                      );
-                    }
-                  }
+                  Navigator.pop(ctx);
+                  // Dùng _switchToRoom: leave phòng cũ (nếu có) trước khi join
+                  await _switchToRoom(
+                    context,
+                        () => room.joinRoom(code),
+                  );
                 },
                 child: Container(
                   width: double.infinity,
@@ -507,43 +539,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
     );
   }
 
-  void _showAlreadyInRoomDialog(RoomProvider room, String value,
-      {bool isCreate = false}) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _C.surface,
-        title: const Text('Already in a Room',
-            style: TextStyle(color: _C.onSurface, fontFamily: 'SpaceGrotesk')),
-        content: const Text(
-            'You are currently in another room. Leave it and join this one?',
-            style: TextStyle(color: _C.onSurfaceVar)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel',
-                style: TextStyle(color: _C.outline)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await room.leaveRoom();
-              final ok = isCreate
-                  ? await room.createRoom(value)
-                  : await room.joinRoom(value);
-              if (ok && mounted) {
-                _navigateToRoom(context, room.currentRoom!.id);
-              }
-            },
-            child: Text(
-              isCreate ? 'Leave & Create' : 'Leave & Join',
-              style: const TextStyle(color: _C.primary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ── Top App Bar ────────────────────────────────────────────

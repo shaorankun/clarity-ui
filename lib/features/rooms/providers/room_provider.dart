@@ -23,6 +23,9 @@ class RoomProvider extends ChangeNotifier {
 
   String? _currentSessionId;
 
+  // Flag để tránh race condition khi đang leave
+  bool _isLeaving = false;
+
   // WebSocket
   StompClient? _stompClient;
   bool isConnected = false;
@@ -45,6 +48,10 @@ class RoomProvider extends ChangeNotifier {
       final roomId = StudyRoom.fromJson(res.data).id;
       await fetchRoom(roomId);
       await TokenStorage.saveRoomId(currentRoom!.id);
+      // BUG FIX: Refresh public room list sau khi tạo để Active Rooms cập nhật ngay
+      if (isPublic) {
+        await fetchPublicRooms();
+      }
       return true;
     } on DioException catch (e) {
       errorMessage = e.response?.data['message'] ?? 'Failed to create room';
@@ -129,12 +136,14 @@ class RoomProvider extends ChangeNotifier {
 
   Future<void> leaveRoom() async {
     if (currentRoom == null) return;
+    _isLeaving = true;
     try {
       await _dio.delete('/api/rooms/${currentRoom!.id}/leave');
     } catch (_) {}
     await _cancelSession();
     await TokenStorage.clearRoomId();
     _cleanup();
+    _isLeaving = false;
   }
 
   Future<void> restoreRoom() async {
@@ -175,6 +184,8 @@ class RoomProvider extends ChangeNotifier {
             destination: '/topic/room/$roomId',
             callback: (frame) {
               print('=== WS: Received: ${frame.body}');
+              // Không xử lý message nếu đang leave hoặc đã rời phòng
+              if (_isLeaving || currentRoom == null) return;
               if (frame.body == null) return;
               final data = jsonDecode(frame.body!);
               final newSession = RoomSession.fromJson(data);
@@ -225,11 +236,14 @@ class RoomProvider extends ChangeNotifier {
   }
 
   Future<void> _refreshMembers(String roomId) async {
+    // Không refresh nếu đang trong quá trình leave
+    if (_isLeaving || currentRoom == null) return;
     try {
       final res = await _dio.get('/api/rooms/$roomId');
       final updatedRoom = StudyRoom.fromJson(res.data);
-      // Chỉ update nếu member list thay đổi
-      if (updatedRoom.members.length != currentRoom?.members.length) {
+      // Chỉ update nếu member list thay đổi và chưa leave
+      if (!_isLeaving && currentRoom != null &&
+          updatedRoom.members.length != currentRoom?.members.length) {
         currentRoom = updatedRoom;
         notifyListeners();
       }
@@ -310,6 +324,7 @@ class RoomProvider extends ChangeNotifier {
     _countdown?.cancel();
     _pollingTimer?.cancel();
     _stompClient?.deactivate();
+    _stompClient = null;   // null ngay để callback không thể fire tiếp
     currentRoom      = null;
     roomSession      = null;
     remainingSeconds = 0;

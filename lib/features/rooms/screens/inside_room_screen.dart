@@ -34,6 +34,15 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
     final isOwner = room.isOwner(userId);
     final session = room.roomSession;
 
+    // Khi currentRoom = null (đã leave/cleanup), tự pop về RoomsScreen
+    if (!room.isLoading && room.currentRoom == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
@@ -322,9 +331,13 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
   }
 
   void _confirmLeave(BuildContext context, RoomProvider room) {
+    // Lưu navigator của screen trước khi mở dialog,
+    // tránh dùng context sau khi dialog unmount gây lỗi pop không chạy
+    final screenNavigator = Navigator.of(context);
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('Leave Room?',
             style: TextStyle(color: AppColors.textPrimary)),
@@ -332,15 +345,15 @@ class _InsideRoomScreenState extends State<InsideRoomScreen> {
             style: TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
             child: const Text('Cancel',
                 style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context); // đóng dialog
+              Navigator.of(dialogCtx).pop(); // đóng dialog
               await room.leaveRoom();
-              if (context.mounted) Navigator.pop(context); // về lobby
+              screenNavigator.pop();         // về lobby — dùng navigator đã lưu
             },
             child: const Text('Leave',
                 style: TextStyle(color: AppColors.danger)),
