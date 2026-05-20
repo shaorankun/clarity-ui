@@ -10,14 +10,19 @@ class StatsProvider extends ChangeNotifier {
 
   final _dio = DioClient.instance;
 
+  // Weekly totals tính từ list — không cần API call thêm
+  int get weeklyTotalMinutes =>
+      overview?.weekly.fold(0, (sum, d) => sum! + d.totalMinutes) ?? 0;
+
+  int get weeklyTotalSessions =>
+      overview?.weekly.fold(0, (sum, d) => sum! + d.sessionCount) ?? 0;
+
   Future<void> fetchStats() async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      // FIX: bỏ call /daily riêng — dùng weekly.last làm today luôn
-      // Giảm từ 3 xuống 2 API call, đồng thời tránh lệch data giữa 2 response
       final results = await Future.wait([
         _dio.get('/api/stats/streak'),
         _dio.get('/api/stats/weekly'),
@@ -27,7 +32,7 @@ class StatsProvider extends ChangeNotifier {
       final weeklyList = results[1].data as List;
       final weekly     = weeklyList.map((e) => DailyStats.fromJson(e)).toList();
 
-      // today = phần tử cuối của weekly (backend luôn trả đủ 7 ngày theo UTC)
+      // today = phần tử cuối của weekly (backend trả đủ 7 ngày theo UTC)
       final today = weekly.isNotEmpty ? weekly.last : null;
 
       overview = StatsOverview(
